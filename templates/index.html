@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MP4 to MP3 Converter</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="card">
+        <header>
+          <h1>MP4 → MP3 Converter</h1>
+          <p>Drag and drop an MP4 file to extract the audio as an MP3.</p>
+        </header>
+
+        <div
+          id="drop-zone"
+          class="drop-zone"
+          role="button"
+          tabindex="0"
+          aria-label="Drag and drop an MP4 file or click to browse"
+        >
+          <div class="drop-zone__content">
+            <span class="drop-zone__icon">🎵</span>
+            <span class="drop-zone__text">Drop your MP4 here</span>
+            <span class="drop-zone__hint">or click to browse</span>
+          </div>
+        </div>
+
+        <div class="file-info" id="file-info">
+          <span class="file-info__label">Selected file:</span>
+          <span class="file-info__name" id="file-name">None</span>
+        </div>
+
+        <div class="actions">
+          <button id="convert-btn" class="button" type="button" disabled>
+            Convert to MP3
+          </button>
+        </div>
+
+        <div class="status" id="status" role="status"></div>
+
+        {% if not ffmpeg_ready %}
+        <div class="warning">
+          <strong>ffmpeg not found.</strong> Install ffmpeg on your system to enable
+          conversion.
+        </div>
+        {% endif %}
+      </section>
+    </main>
+
+    <input id="file-input" type="file" accept=".mp4" hidden />
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
