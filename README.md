@@ -21,6 +21,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Optional: transcription + speaker labels
+
+To generate transcripts (and optionally differentiate speakers), install the extra dependencies:
+
+```bash
+pip install -r requirements-transcribe.txt
+```
+
+For speaker labels, set a Hugging Face token for the diarization model:
+
+```bash
+export PYANNOTE_TOKEN=your_token_here
+```
+
+You can also change the Whisper model size with:
+
+```bash
+export WHISPER_MODEL=base
+```
+
 ## Run
 
 ```bash
