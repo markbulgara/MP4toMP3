@@ -8,10 +8,13 @@ const waveformSection = document.getElementById("waveform-section");
 const waveformCanvas = document.getElementById("waveform-canvas");
 const waveformImage = document.getElementById("waveform-image");
 const waveformSelection = document.getElementById("waveform-selection");
+const waveformPlayhead = document.getElementById("waveform-playhead");
 const rangeStart = document.getElementById("range-start");
 const rangeEnd = document.getElementById("range-end");
 const rangeDuration = document.getElementById("range-duration");
 const playButton = document.getElementById("play-btn");
+const playSelectionButton = document.getElementById("play-selection-btn");
+const loopToggle = document.getElementById("loop-toggle");
 const playbackTime = document.getElementById("playback-time");
 const padBeforeInput = document.getElementById("pad-before");
 const padAfterInput = document.getElementById("pad-after");
@@ -24,6 +27,7 @@ let waveformDuration = 0;
 let selectionStart = null;
 let selectionEnd = null;
 let isSelecting = false;
+let isPlayingSelection = false;
 
 const setStatus = (message, type = "") => {
   status.textContent = message;
@@ -42,12 +46,17 @@ const resetWaveform = () => {
   waveformSection.hidden = true;
   waveformSelection.style.width = "0";
   waveformSelection.style.left = "0";
+  waveformPlayhead.style.left = "0";
   rangeStart.textContent = "0.0s";
   rangeEnd.textContent = "0.0s";
   rangeDuration.textContent = "0.0s";
   exportButton.disabled = true;
   playButton.disabled = true;
+  playSelectionButton.disabled = true;
   playButton.textContent = "Play";
+  playSelectionButton.textContent = "Play selection";
+  loopToggle.checked = false;
+  isPlayingSelection = false;
   playbackTime.textContent = "0.0s";
 };
 
@@ -151,6 +160,7 @@ const uploadAndGenerateWaveform = async () => {
     waveformImage.src = data.waveform;
     audioPlayer.src = data.preview_url;
     playButton.disabled = false;
+    playSelectionButton.disabled = false;
     audioPlayer.hidden = false;
     audioPlayer.currentTime = 0;
     playbackTime.textContent = "0.0s";
@@ -181,6 +191,7 @@ const updateSelectionDisplay = () => {
     rangeStart.textContent = "0.0s";
     rangeEnd.textContent = "0.0s";
     rangeDuration.textContent = "0.0s";
+    playSelectionButton.disabled = true;
     return;
   }
 
@@ -200,6 +211,7 @@ const updateSelectionDisplay = () => {
   waveformSelection.style.width = `${Math.abs(right - left)}px`;
 
   exportButton.disabled = duration <= 0;
+  playSelectionButton.disabled = duration <= 0;
 };
 
 const handleSelectionStart = (event) => {
@@ -322,12 +334,60 @@ playButton.addEventListener("click", () => {
     audioPlayer.pause();
     playButton.textContent = "Play";
   }
+  isPlayingSelection = false;
+});
+
+playSelectionButton.addEventListener("click", () => {
+  if (!audioPlayer.src || selectionStart === null || selectionEnd === null) {
+    return;
+  }
+
+  const start = Math.min(selectionStart, selectionEnd);
+  const end = Math.max(selectionStart, selectionEnd);
+  if (end <= start) {
+    return;
+  }
+
+  if (audioPlayer.paused || !isPlayingSelection) {
+    audioPlayer.currentTime = start;
+    audioPlayer.play();
+    playSelectionButton.textContent = "Pause selection";
+    playButton.textContent = "Play";
+    isPlayingSelection = true;
+  } else {
+    audioPlayer.pause();
+    playSelectionButton.textContent = "Play selection";
+    isPlayingSelection = false;
+  }
 });
 
 audioPlayer.addEventListener("timeupdate", () => {
   playbackTime.textContent = `${audioPlayer.currentTime.toFixed(1)}s`;
+
+  const rect = waveformCanvas.getBoundingClientRect();
+  const position = waveformDuration
+    ? (audioPlayer.currentTime / waveformDuration) * rect.width
+    : 0;
+  waveformPlayhead.style.left = `${Math.min(Math.max(position, 0), rect.width)}px`;
+
+  if (isPlayingSelection && selectionStart !== null && selectionEnd !== null) {
+    const start = Math.min(selectionStart, selectionEnd);
+    const end = Math.max(selectionStart, selectionEnd);
+    if (audioPlayer.currentTime >= end) {
+      if (loopToggle.checked) {
+        audioPlayer.currentTime = start;
+        audioPlayer.play();
+      } else {
+        audioPlayer.pause();
+        playSelectionButton.textContent = "Play selection";
+        isPlayingSelection = false;
+      }
+    }
+  }
 });
 
 audioPlayer.addEventListener("ended", () => {
   playButton.textContent = "Play";
+  playSelectionButton.textContent = "Play selection";
+  isPlayingSelection = false;
 });
