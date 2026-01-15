@@ -13,6 +13,11 @@ from typing import Dict, List
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 def parse_headers(raw_headers: List[str]) -> Dict[str, str]:
     headers: Dict[str, str] = {}
@@ -119,6 +124,8 @@ def main() -> int:
         headers.setdefault("Referer", args.referer)
     if args.user_agent:
         headers.setdefault("User-Agent", args.user_agent)
+    else:
+        headers.setdefault("User-Agent", DEFAULT_USER_AGENT)
 
     ydl_opts = {
         "outtmpl": str(output_dir / "%(title)s.%(ext)s"),
