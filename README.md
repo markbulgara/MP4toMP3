@@ -40,8 +40,16 @@ Download audio only:
 python downloader.py "https://example.com/video-page" --audio-only
 ```
 
+Download a site that requires a Referer or User-Agent:
+
+```bash
+python downloader.py "https://www.1shows.nl/movies/1242898-predator-badlands?streaming=true" \
+  --referer "https://www.1shows.nl/movies/1242898-predator-badlands?streaming=true" \
+  --user-agent "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+```
+
 ## Notes
 
 - This uses `yt-dlp` under the hood. If a site requires authentication, pass cookies
-  or headers via the `--cookies` or `--headers` options.
+  or headers via the `--cookies`, `--header`, `--referer`, or `--user-agent` options.
 - Ensure you have the rights to download content from any URL you supply.

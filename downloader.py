@@ -52,6 +52,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Custom request header in 'Name: Value' format. Can be repeated.",
     )
     parser.add_argument(
+        "--referer",
+        help="Set a Referer header (some sites require the page URL).",
+    )
+    parser.add_argument(
+        "--user-agent",
+        help="Set a custom User-Agent header to mimic a browser.",
+    )
+    parser.add_argument(
         "--headers-json",
         type=Path,
         help="Path to a JSON file containing additional headers.",
@@ -83,6 +91,10 @@ def main() -> int:
     headers = {}
     headers.update(load_json_headers(args.headers_json))
     headers.update(parse_headers(args.header))
+    if args.referer:
+        headers.setdefault("Referer", args.referer)
+    if args.user_agent:
+        headers.setdefault("User-Agent", args.user_agent)
 
     ydl_opts = {
         "outtmpl": str(output_dir / "%(title)s.%(ext)s"),
