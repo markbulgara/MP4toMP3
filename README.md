@@ -5,7 +5,7 @@ A simple local web app for converting MP4 videos into MP3 audio files using drag
 ## Requirements
 
 - Python 3.9+
-- ffmpeg installed and available on your PATH
+- ffmpeg + ffprobe installed and available on your PATH
 
 ### Install ffmpeg
 
@@ -21,30 +21,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Optional: transcription + speaker labels
-
-To generate transcripts (and optionally differentiate speakers), install the extra dependencies:
-
-```bash
-pip install -r requirements-transcribe.txt
-```
-
-For speaker labels, set a Hugging Face token for the diarization model:
-
-```bash
-export PYANNOTE_TOKEN=your_token_here
-```
-
-You can also change the Whisper model size with:
-
-```bash
-export WHISPER_MODEL=base
-```
-
 ## Run
 
 ```bash
 python app.py
 ```
 
-Visit `http://localhost:5000` and drag/drop an MP4 file to convert it.
+Visit `http://localhost:5000` and drag/drop an MP4 file to convert it or generate a waveform for
+range selection.

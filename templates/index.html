@@ -12,8 +12,8 @@
         <header>
           <h1>MP4 → MP3 Converter</h1>
           <p>
-            Drag and drop an MP4 file to extract the audio as an MP3, or generate a
-            transcript and export just the parts you need.
+            Drag and drop an MP4 file to extract the audio as an MP3, or visualize the
+            waveform to select a specific range for export.
           </p>
         </header>
 
@@ -40,20 +40,31 @@
           <button id="convert-btn" class="button" type="button" disabled>
             Convert full MP3
           </button>
-          <button id="transcribe-btn" class="button button--secondary" type="button" disabled>
-            Transcribe &amp; Select
+          <button id="waveform-btn" class="button button--secondary" type="button" disabled>
+            Generate waveform
           </button>
         </div>
 
         <div class="status" id="status" role="status"></div>
 
-        <section class="transcript" id="transcript-section" hidden>
-          <header class="transcript__header">
-            <h2>Transcript</h2>
-            <p>Select the lines you want to export, then add padding to avoid abrupt cuts.</p>
+        <section class="waveform" id="waveform-section" hidden>
+          <header class="waveform__header">
+            <h2>Waveform</h2>
+            <p>Click and drag across the waveform to choose the export range.</p>
           </header>
 
-          <div class="transcript__controls">
+          <div class="waveform__canvas" id="waveform-canvas">
+            <img id="waveform-image" alt="Audio waveform" />
+            <div class="waveform__selection" id="waveform-selection"></div>
+          </div>
+
+          <div class="waveform__meta" id="waveform-meta">
+            <span>Start: <strong id="range-start">0.0s</strong></span>
+            <span>End: <strong id="range-end">0.0s</strong></span>
+            <span>Duration: <strong id="range-duration">0.0s</strong></span>
+          </div>
+
+          <div class="waveform__controls">
             <label>
               Padding before (seconds)
               <input id="pad-before" type="number" min="0" step="0.1" value="0.5" />
@@ -64,8 +75,6 @@
             </label>
           </div>
 
-          <div id="transcript-list" class="transcript__list"></div>
-
           <div class="actions">
             <button id="export-btn" class="button" type="button" disabled>
               Export selection
@@ -75,21 +84,8 @@
 
         {% if not ffmpeg_ready %}
         <div class="warning">
-          <strong>ffmpeg not found.</strong> Install ffmpeg on your system to enable
+          <strong>ffmpeg not found.</strong> Install ffmpeg and ffprobe on your system to enable
           conversion.
-        </div>
-        {% endif %}
-
-        {% if not whisper_ready %}
-        <div class="warning">
-          <strong>Transcription unavailable.</strong> Install openai-whisper to enable transcripts.
-        </div>
-        {% endif %}
-
-        {% if whisper_ready and not diarization_ready %}
-        <div class="note">
-          Speaker labels are disabled. Set <code>PYANNOTE_TOKEN</code> and install
-          <code>pyannote.audio</code> to differentiate voices.
         </div>
         {% endif %}
       </section>

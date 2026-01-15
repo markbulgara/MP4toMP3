@@ -22,7 +22,7 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 20px;
   padding: 32px;
-  max-width: 720px;
+  max-width: 760px;
   width: 100%;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.45);
 }
@@ -134,86 +134,79 @@ p {
   color: #facc15;
 }
 
-.warning,
-.note {
+.warning {
   margin-top: 16px;
   padding: 12px;
   border-radius: 12px;
   font-size: 0.95rem;
-}
-
-.warning {
   background: rgba(248, 113, 113, 0.12);
   border: 1px solid rgba(248, 113, 113, 0.3);
   color: #fecaca;
 }
 
-.note {
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-}
-
-.transcript {
+.waveform {
   margin-top: 32px;
   padding-top: 24px;
   border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.transcript__header {
+.waveform__header {
   display: grid;
   gap: 4px;
 }
 
-.transcript__controls {
+.waveform__canvas {
+  position: relative;
+  margin-top: 16px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.waveform__canvas img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.waveform__selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: rgba(56, 189, 248, 0.3);
+  border: 2px solid rgba(56, 189, 248, 0.8);
+  pointer-events: none;
+}
+
+.waveform__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 0.9rem;
+  color: #cbd5f5;
+}
+
+.waveform__controls {
   display: grid;
   gap: 12px;
   margin: 16px 0 20px;
 }
 
-.transcript__controls label {
+.waveform__controls label {
   display: grid;
   gap: 6px;
   font-size: 0.9rem;
   color: #cbd5f5;
 }
 
-.transcript__controls input {
+.waveform__controls input {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.4);
   background: rgba(15, 23, 42, 0.6);
   color: #f8fafc;
-}
-
-.transcript__list {
-  display: grid;
-  gap: 12px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.transcript__row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.transcript__row input {
-  margin-top: 4px;
-}
-
-.transcript__meta {
-  font-size: 0.8rem;
-  color: #94a3b8;
-}
-
-.transcript__text {
-  grid-column: 2 / -1;
-  font-size: 0.95rem;
-  color: #e2e8f0;
 }
