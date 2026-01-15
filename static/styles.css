@@ -210,6 +210,11 @@ p {
   color: #cbd5f5;
 }
 
+.waveform__audio {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .waveform__controls label {
   display: grid;
   gap: 6px;

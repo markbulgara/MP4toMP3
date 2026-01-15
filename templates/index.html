@@ -71,6 +71,14 @@
             <span id="playback-time">0.0s</span>
           </div>
 
+          <audio
+            id="audio-player"
+            class="waveform__audio"
+            controls
+            preload="metadata"
+            hidden
+          ></audio>
+
           <div class="waveform__controls">
             <label>
               Padding before (seconds)
@@ -99,7 +107,6 @@
     </main>
 
     <input id="file-input" type="file" accept=".mp4" hidden />
-    <audio id="audio-player" preload="metadata"></audio>
 
     <script src="/static/app.js"></script>
   </body>

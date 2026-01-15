@@ -38,6 +38,7 @@ const resetWaveform = () => {
   waveformImage.removeAttribute("src");
   audioPlayer.removeAttribute("src");
   audioPlayer.load();
+  audioPlayer.hidden = true;
   waveformSection.hidden = true;
   waveformSelection.style.width = "0";
   waveformSelection.style.left = "0";
@@ -150,6 +151,7 @@ const uploadAndGenerateWaveform = async () => {
     waveformImage.src = data.waveform;
     audioPlayer.src = data.preview_url;
     playButton.disabled = false;
+    audioPlayer.hidden = false;
     audioPlayer.currentTime = 0;
     playbackTime.textContent = "0.0s";
     waveformSection.hidden = false;
