@@ -22,6 +22,7 @@ class Session:
     token: str
     directory: str
     input_path: str
+    preview_path: str
     created_at: float
     duration: float
 
@@ -96,12 +97,13 @@ def extract_audio(input_path: str, output_path: str) -> subprocess.CompletedProc
     return subprocess.run(command, capture_output=True, text=True)
 
 
-def store_session(temp_dir: str, input_path: str, duration: float) -> Session:
+def store_session(temp_dir: str, input_path: str, preview_path: str, duration: float) -> Session:
     token = uuid.uuid4().hex
     session = Session(
         token=token,
         directory=temp_dir,
         input_path=input_path,
+        preview_path=preview_path,
         created_at=time.time(),
         duration=duration,
     )
@@ -172,6 +174,7 @@ def waveform():
     temp_dir = tempfile.mkdtemp(prefix="mp4to3_")
     input_path = os.path.join(temp_dir, filename)
     waveform_path = os.path.join(temp_dir, "waveform.png")
+    preview_path = os.path.join(temp_dir, "preview.mp3")
     upload.save(input_path)
 
     duration = ffprobe_duration(input_path)
@@ -180,7 +183,12 @@ def waveform():
         shutil.rmtree(temp_dir, ignore_errors=True)
         return {"error": "Waveform generation failed.", "details": waveform_result.stderr}, 500
 
-    session = store_session(temp_dir, input_path, duration)
+    preview_result = extract_audio(input_path, preview_path)
+    if preview_result.returncode != 0:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return {"error": "Preview audio failed.", "details": preview_result.stderr}, 500
+
+    session = store_session(temp_dir, input_path, preview_path, duration)
 
     with open(waveform_path, "rb") as image_file:
         encoded = base64.b64encode(image_file.read()).decode("utf-8")
@@ -189,6 +197,7 @@ def waveform():
         "token": session.token,
         "duration": session.duration,
         "waveform": f"data:image/png;base64,{encoded}",
+        "preview_url": f"/preview/{session.token}",
     }
 
 
@@ -246,6 +255,14 @@ def export():
         return response
 
     return send_file(output_path, as_attachment=True, download_name="selection.mp3")
+
+
+@app.get("/preview/<token>")
+def preview(token: str):
+    session = SESSIONS.get(token)
+    if not session:
+        return {"error": "Waveform session expired. Please upload again."}, 400
+    return send_file(session.preview_path, mimetype="audio/mpeg")
 
 
 if __name__ == "__main__":

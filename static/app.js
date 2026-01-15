@@ -11,9 +11,12 @@ const waveformSelection = document.getElementById("waveform-selection");
 const rangeStart = document.getElementById("range-start");
 const rangeEnd = document.getElementById("range-end");
 const rangeDuration = document.getElementById("range-duration");
+const playButton = document.getElementById("play-btn");
+const playbackTime = document.getElementById("playback-time");
 const padBeforeInput = document.getElementById("pad-before");
 const padAfterInput = document.getElementById("pad-after");
 const status = document.getElementById("status");
+const audioPlayer = document.getElementById("audio-player");
 
 let selectedFile = null;
 let waveformToken = null;
@@ -33,6 +36,8 @@ const resetWaveform = () => {
   selectionStart = null;
   selectionEnd = null;
   waveformImage.removeAttribute("src");
+  audioPlayer.removeAttribute("src");
+  audioPlayer.load();
   waveformSection.hidden = true;
   waveformSelection.style.width = "0";
   waveformSelection.style.left = "0";
@@ -40,6 +45,9 @@ const resetWaveform = () => {
   rangeEnd.textContent = "0.0s";
   rangeDuration.textContent = "0.0s";
   exportButton.disabled = true;
+  playButton.disabled = true;
+  playButton.textContent = "Play";
+  playbackTime.textContent = "0.0s";
 };
 
 const setFile = (file) => {
@@ -140,6 +148,10 @@ const uploadAndGenerateWaveform = async () => {
     waveformToken = data.token;
     waveformDuration = data.duration;
     waveformImage.src = data.waveform;
+    audioPlayer.src = data.preview_url;
+    playButton.disabled = false;
+    audioPlayer.currentTime = 0;
+    playbackTime.textContent = "0.0s";
     waveformSection.hidden = false;
     selectionStart = 0;
     selectionEnd = waveformDuration;
@@ -296,3 +308,24 @@ window.addEventListener("mouseup", handleSelectionEnd);
 convertButton.addEventListener("click", uploadAndConvert);
 waveformButton.addEventListener("click", uploadAndGenerateWaveform);
 exportButton.addEventListener("click", exportSelection);
+
+playButton.addEventListener("click", () => {
+  if (!audioPlayer.src) {
+    return;
+  }
+  if (audioPlayer.paused) {
+    audioPlayer.play();
+    playButton.textContent = "Pause";
+  } else {
+    audioPlayer.pause();
+    playButton.textContent = "Play";
+  }
+});
+
+audioPlayer.addEventListener("timeupdate", () => {
+  playbackTime.textContent = `${audioPlayer.currentTime.toFixed(1)}s`;
+});
+
+audioPlayer.addEventListener("ended", () => {
+  playButton.textContent = "Play";
+});

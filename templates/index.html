@@ -64,6 +64,13 @@
             <span>Duration: <strong id="range-duration">0.0s</strong></span>
           </div>
 
+          <div class="waveform__player">
+            <button id="play-btn" class="button button--ghost" type="button" disabled>
+              Play
+            </button>
+            <span id="playback-time">0.0s</span>
+          </div>
+
           <div class="waveform__controls">
             <label>
               Padding before (seconds)
@@ -92,6 +99,7 @@
     </main>
 
     <input id="file-input" type="file" accept=".mp4" hidden />
+    <audio id="audio-player" preload="metadata"></audio>
 
     <script src="/static/app.js"></script>
   </body>
