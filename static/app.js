@@ -6,6 +6,7 @@ const waveformButton = document.getElementById("waveform-btn");
 const exportButton = document.getElementById("export-btn");
 const waveformSection = document.getElementById("waveform-section");
 const waveformCanvas = document.getElementById("waveform-canvas");
+const waveformContent = document.getElementById("waveform-content");
 const waveformImage = document.getElementById("waveform-image");
 const waveformSelection = document.getElementById("waveform-selection");
 const waveformPlayhead = document.getElementById("waveform-playhead");
@@ -28,6 +29,8 @@ let selectionStart = null;
 let selectionEnd = null;
 let isSelecting = false;
 let isPlayingSelection = false;
+let zoomLevel = 1;
+let baseWidth = 0;
 
 const setStatus = (message, type = "") => {
   status.textContent = message;
@@ -47,6 +50,10 @@ const resetWaveform = () => {
   waveformSelection.style.width = "0";
   waveformSelection.style.left = "0";
   waveformPlayhead.style.left = "0";
+  waveformCanvas.scrollLeft = 0;
+  zoomLevel = 1;
+  baseWidth = waveformCanvas.clientWidth;
+  waveformContent.style.width = `${baseWidth}px`;
   rangeStart.textContent = "0.0s";
   rangeEnd.textContent = "0.0s";
   rangeDuration.textContent = "0.0s";
@@ -165,6 +172,10 @@ const uploadAndGenerateWaveform = async () => {
     audioPlayer.currentTime = 0;
     playbackTime.textContent = "0.0s";
     waveformSection.hidden = false;
+    baseWidth = waveformCanvas.clientWidth;
+    zoomLevel = 1;
+    waveformCanvas.scrollLeft = 0;
+    waveformContent.style.width = `${baseWidth}px`;
     selectionStart = 0;
     selectionEnd = waveformDuration;
     updateSelectionDisplay();
@@ -180,9 +191,28 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const getTimeFromPosition = (clientX) => {
   const rect = waveformCanvas.getBoundingClientRect();
-  const relativeX = clamp(clientX - rect.left, 0, rect.width);
-  const ratio = rect.width ? relativeX / rect.width : 0;
+  const scaledWidth = baseWidth * zoomLevel;
+  const relativeX = clamp(clientX - rect.left + waveformCanvas.scrollLeft, 0, scaledWidth);
+  const ratio = scaledWidth ? relativeX / scaledWidth : 0;
   return ratio * waveformDuration;
+};
+
+const updateZoom = (nextZoom) => {
+  if (!waveformToken) {
+    return;
+  }
+  zoomLevel = clamp(nextZoom, 1, 5);
+  waveformContent.style.width = `${baseWidth * zoomLevel}px`;
+  updateSelectionDisplay();
+  updatePlayhead();
+};
+
+const updatePlayhead = () => {
+  const scaledWidth = baseWidth * zoomLevel;
+  const position = waveformDuration
+    ? (audioPlayer.currentTime / waveformDuration) * scaledWidth
+    : 0;
+  waveformPlayhead.style.left = `${Math.min(Math.max(position, 0), scaledWidth)}px`;
 };
 
 const updateSelectionDisplay = () => {
@@ -203,9 +233,9 @@ const updateSelectionDisplay = () => {
   rangeEnd.textContent = `${end.toFixed(2)}s`;
   rangeDuration.textContent = `${duration.toFixed(2)}s`;
 
-  const rect = waveformCanvas.getBoundingClientRect();
-  const left = rect.width ? (start / waveformDuration) * rect.width : 0;
-  const right = rect.width ? (end / waveformDuration) * rect.width : 0;
+  const scaledWidth = baseWidth * zoomLevel;
+  const left = scaledWidth ? (start / waveformDuration) * scaledWidth : 0;
+  const right = scaledWidth ? (end / waveformDuration) * scaledWidth : 0;
 
   waveformSelection.style.left = `${Math.min(left, right)}px`;
   waveformSelection.style.width = `${Math.abs(right - left)}px`;
@@ -218,6 +248,7 @@ const handleSelectionStart = (event) => {
   if (!waveformToken) {
     return;
   }
+  event.preventDefault();
   isSelecting = true;
   selectionStart = getTimeFromPosition(event.clientX);
   selectionEnd = selectionStart;
@@ -318,6 +349,28 @@ dropZone.addEventListener("drop", (event) => {
 waveformCanvas.addEventListener("mousedown", handleSelectionStart);
 window.addEventListener("mousemove", handleSelectionMove);
 window.addEventListener("mouseup", handleSelectionEnd);
+waveformCanvas.addEventListener(
+  "wheel",
+  (event) => {
+    if (!waveformToken) {
+      return;
+    }
+    event.preventDefault();
+    const direction = event.deltaY < 0 ? 0.1 : -0.1;
+    updateZoom(zoomLevel + direction);
+  },
+  { passive: false },
+);
+
+window.addEventListener("resize", () => {
+  if (!waveformToken) {
+    return;
+  }
+  baseWidth = waveformCanvas.clientWidth;
+  waveformContent.style.width = `${baseWidth * zoomLevel}px`;
+  updateSelectionDisplay();
+  updatePlayhead();
+});
 
 convertButton.addEventListener("click", uploadAndConvert);
 waveformButton.addEventListener("click", uploadAndGenerateWaveform);
@@ -363,12 +416,7 @@ playSelectionButton.addEventListener("click", () => {
 
 audioPlayer.addEventListener("timeupdate", () => {
   playbackTime.textContent = `${audioPlayer.currentTime.toFixed(1)}s`;
-
-  const rect = waveformCanvas.getBoundingClientRect();
-  const position = waveformDuration
-    ? (audioPlayer.currentTime / waveformDuration) * rect.width
-    : 0;
-  waveformPlayhead.style.left = `${Math.min(Math.max(position, 0), rect.width)}px`;
+  updatePlayhead();
 
   if (isPlayingSelection && selectionStart !== null && selectionEnd !== null) {
     const start = Math.min(selectionStart, selectionEnd);

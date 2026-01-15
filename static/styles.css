@@ -168,12 +168,21 @@ p {
   overflow: hidden;
   background: rgba(30, 41, 59, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.2);
+  cursor: crosshair;
+  overflow-x: auto;
+}
+
+.waveform__content {
+  position: relative;
+  width: 100%;
 }
 
 .waveform__canvas img {
   display: block;
   width: 100%;
   height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .waveform__selection {
