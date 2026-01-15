@@ -52,4 +52,6 @@ python downloader.py "https://www.1shows.nl/movies/1242898-predator-badlands?str
 
 - This uses `yt-dlp` under the hood. If a site requires authentication, pass cookies
   or headers via the `--cookies`, `--header`, `--referer`, or `--user-agent` options.
+- If `yt-dlp` reports an unsupported URL, the tool will attempt a lightweight HTML
+  scrape to locate direct `.m3u8` or `.mp4` links and retry with the first match.
 - Ensure you have the rights to download content from any URL you supply.

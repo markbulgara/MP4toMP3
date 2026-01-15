@@ -5,8 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import urllib.request
 from pathlib import Path
 from typing import Dict, List
+
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 
 def parse_headers(raw_headers: List[str]) -> Dict[str, str]:
@@ -76,14 +81,33 @@ def load_json_headers(path: Path | None) -> Dict[str, str]:
     return {str(key): str(value) for key, value in data.items()}
 
 
+def find_media_urls(html: str) -> List[str]:
+    patterns = [
+        r"https?://[^\"'\\s]+\\.m3u8[^\"'\\s]*",
+        r"https?://[^\"'\\s]+\\.mp4[^\"'\\s]*",
+    ]
+    urls: List[str] = []
+    for pattern in patterns:
+        urls.extend(re.findall(pattern, html, flags=re.IGNORECASE))
+    seen = set()
+    ordered = []
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+    return ordered
+
+
+def fetch_html(url: str, headers: Dict[str, str]) -> str:
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read().decode("utf-8", errors="ignore")
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-
-    try:
-        from yt_dlp import YoutubeDL
-    except ModuleNotFoundError:  # pragma: no cover
-        parser.error("yt-dlp is required. Install it with: pip install -r requirements.txt")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -125,7 +149,17 @@ def main() -> int:
         )
 
     with YoutubeDL(ydl_opts) as ydl:
-        ydl.download([args.url])
+        try:
+            ydl.download([args.url])
+        except DownloadError as exc:  # pragma: no cover - fallback path
+            message = str(exc)
+            if "Unsupported URL" not in message:
+                raise
+            html = fetch_html(args.url, headers)
+            media_urls = find_media_urls(html)
+            if not media_urls:
+                raise
+            ydl.download([media_urls[0]])
 
     return 0
 
