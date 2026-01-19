@@ -56,6 +56,7 @@ The batch launcher opens a console window so you can watch crawl progress logs.
 - `--include-subdomains` (flag)
 - `--use-playwright always|auto|never` (default: auto)
 - `--max-depth 4` (default: 3)
+- `--max-url-length 200` (skip URLs longer than this; 0 disables)
 - `--timeout 20` (default: 20 seconds)
 - `--user-agent "UniversalVideoCrawler/1.0"`
 - `--keywords "pricing,private beta"` (comma-separated keyword matches)
@@ -66,6 +67,7 @@ The batch launcher opens a console window so you can watch crawl progress logs.
 - `--use-cached-urls` (reuse cached URL list for a domain to “look again” quickly)
 - `--skip-known-misses` (skip URLs that previously had no keyword matches)
 - `--skip-known-hits` (skip URLs that already matched keywords for faster rechecks)
+- `--refresh-urls` (force rediscovery even if cached URLs exist)
 - `--keep-outputs` (timestamp new reports instead of overwriting)
 
 ### Example advanced runs
@@ -91,6 +93,9 @@ python universal_site_video_grid.py --base https://example.com --keywords "priva
 
 # Fast incremental run that skips pages already matching keywords
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --use-cache --use-cached-urls --skip-known-hits
+
+# Force a full rediscovery even with cached URLs
+python universal_site_video_grid.py --base https://example.com --refresh-urls
 
 # Keep all reports by timestamping outputs
 python universal_site_video_grid.py --base https://example.com --keep-outputs

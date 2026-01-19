@@ -244,6 +244,12 @@ def normalize_url(url: str) -> Optional[str]:
     return normalized
 
 
+def within_url_limit(url: str, max_length: int) -> bool:
+    if max_length <= 0:
+        return True
+    return len(url) <= max_length
+
+
 def in_scope(url: str, base_host: str, include_subdomains: bool) -> bool:
     try:
         host = urlparse(url).netloc.lower()
@@ -821,6 +827,7 @@ async def discover_urls(
     limiter: RateLimiter,
     semaphore: asyncio.Semaphore,
     timeout: float,
+    max_url_length: int,
 ) -> List[str]:
     base_host = urlparse(base_url).netloc.lower()
     urls: List[str] = []
@@ -829,6 +836,8 @@ async def discover_urls(
     async def add_url(candidate: str) -> None:
         normalized = normalize_url(candidate)
         if not normalized:
+            return
+        if not within_url_limit(normalized, max_url_length):
             return
         if not in_scope(normalized, base_host, include_subdomains):
             return
@@ -853,6 +862,7 @@ async def discover_urls(
         semaphore,
         timeout,
         max_pages,
+        max_url_length,
     )
     for item in sitemap_urls:
         await add_url(item)
@@ -870,6 +880,7 @@ async def discover_urls(
             semaphore,
             timeout,
             max_pages,
+            max_url_length,
             urls,
             seen,
         )
@@ -885,6 +896,7 @@ async def get_sitemap_urls(
     semaphore: asyncio.Semaphore,
     timeout: float,
     max_pages: int,
+    max_url_length: int,
 ) -> List[str]:
     base_host = urlparse(base_url).netloc.lower()
     sitemap_candidates: List[str] = []
@@ -910,6 +922,8 @@ async def get_sitemap_urls(
             normalized = normalize_url(loc)
             if not normalized:
                 continue
+            if not within_url_limit(normalized, max_url_length):
+                continue
             if not in_scope(normalized, base_host, include_subdomains):
                 continue
             if is_skippable(normalized):
@@ -932,6 +946,8 @@ async def get_sitemap_urls(
                     normalized = normalize_url(item)
                     if not normalized:
                         continue
+                    if not within_url_limit(normalized, max_url_length):
+                        continue
                     if not in_scope(normalized, base_host, include_subdomains):
                         continue
                     gathered.append(normalized)
@@ -950,6 +966,7 @@ async def bfs_crawl(
     semaphore: asyncio.Semaphore,
     timeout: float,
     max_pages: int,
+    max_url_length: int,
     urls: List[str],
     seen: Set[str],
 ) -> None:
@@ -977,6 +994,8 @@ async def bfs_crawl(
                     continue
                 normalized = normalize_url(href)
                 if not normalized:
+                    continue
+                if not within_url_limit(normalized, max_url_length):
                     continue
                 if normalized in seen:
                     continue
@@ -1088,6 +1107,8 @@ async def run_crawl(args: argparse.Namespace) -> int:
             robots = parse_robots(robots_response.text)
 
         cached_domain_urls = cache.get("domains", {}).get(base_host, [])
+        if args.use_cache and cached_domain_urls and not args.refresh_urls:
+            args.use_cached_urls = True
         if args.use_cached_urls and cached_domain_urls:
             if len(cached_domain_urls) >= args.max_pages:
                 urls = cached_domain_urls[: args.max_pages]
@@ -1102,6 +1123,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                     limiter,
                     semaphore,
                     args.timeout,
+                    args.max_url_length,
                 )
                 cache.setdefault("domains", {})[base_host] = urls
         else:
@@ -1115,6 +1137,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 limiter,
                 semaphore,
                 args.timeout,
+                args.max_url_length,
             )
             cache.setdefault("domains", {})[base_host] = urls
 
@@ -1258,6 +1281,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Playwright usage strategy",
     )
     parser.add_argument("--max-depth", type=int, default=3, help="Max depth for link crawl")
+    parser.add_argument(
+        "--max-url-length",
+        type=int,
+        default=200,
+        help="Maximum URL length to consider (0 disables the limit)",
+    )
     parser.add_argument("--timeout", type=int, default=20, help="Request timeout in seconds")
     parser.add_argument("--user-agent", default=USER_AGENT_DEFAULT, help="User-Agent header")
     parser.add_argument(
@@ -1299,6 +1328,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--skip-known-hits",
         action="store_true",
         help="Skip URLs that already matched keywords (faster incremental runs)",
+    )
+    parser.add_argument(
+        "--refresh-urls",
+        action="store_true",
+        help="Force rediscovery of URLs even if cached URLs exist",
     )
     parser.add_argument(
         "--keep-outputs",
@@ -1350,6 +1384,7 @@ def build_gui() -> None:
     concurrency_var = tk.IntVar(value=6)
     delay_var = tk.DoubleVar(value=0.15)
     max_depth_var = tk.IntVar(value=3)
+    max_url_length_var = tk.IntVar(value=200)
     timeout_var = tk.IntVar(value=20)
     user_agent_var = tk.StringVar(value=USER_AGENT_DEFAULT)
     include_subdomains_var = tk.BooleanVar(value=False)
@@ -1363,6 +1398,7 @@ def build_gui() -> None:
     skip_known_hits_var = tk.BooleanVar(value=True)
     cache_file_var = tk.StringVar(value="crawl_cache.json")
     keep_outputs_var = tk.BooleanVar(value=True)
+    refresh_urls_var = tk.BooleanVar(value=False)
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
         anchor=tk.W, pady=(0, 8)
@@ -1373,6 +1409,7 @@ def build_gui() -> None:
     add_row("Concurrency", concurrency_var)
     add_row("Delay (s)", delay_var)
     add_row("Max depth", max_depth_var)
+    add_row("Max URL length", max_url_length_var)
     add_row("Timeout (s)", timeout_var)
     add_row("User-Agent", user_agent_var)
     add_row("Keywords", keywords_var)
@@ -1418,6 +1455,14 @@ def build_gui() -> None:
         cached_urls_row,
         text="Use cached URLs for this domain (look again)",
         variable=use_cached_urls_var,
+    ).pack(side=tk.LEFT)
+
+    refresh_row = ttk.Frame(frame)
+    refresh_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        refresh_row,
+        text="Force URL rediscovery (ignore cache)",
+        variable=refresh_urls_var,
     ).pack(side=tk.LEFT)
 
     skip_row = ttk.Frame(frame)
@@ -1467,6 +1512,7 @@ def build_gui() -> None:
         args.concurrency = concurrency_var.get()
         args.delay = delay_var.get()
         args.max_depth = max_depth_var.get()
+        args.max_url_length = max_url_length_var.get()
         args.timeout = timeout_var.get()
         args.user_agent = user_agent_var.get().strip() or USER_AGENT_DEFAULT
         args.include_subdomains = include_subdomains_var.get()
@@ -1480,6 +1526,7 @@ def build_gui() -> None:
         args.skip_known_hits = skip_known_hits_var.get() or use_cached
         args.cache_file = cache_file_var.get().strip() or "crawl_cache.json"
         args.keep_outputs = keep_outputs_var.get()
+        args.refresh_urls = refresh_urls_var.get()
 
         log_line(f"Starting crawl for {args.base}")
 
