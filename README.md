@@ -25,6 +25,29 @@ go build -o bin/katana-indexer ./cmd/katana-indexer
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
+## First-time setup (step-by-step)
+
+1. **Install Katana**: follow the Katana README to install the CLI and ensure it is on your `PATH`.
+2. **Verify Go is installed**:
+   ```bash
+   go version
+   ```
+3. **Build the binary**:
+   ```bash
+   mkdir -p bin
+   go build -o bin/katana-indexer ./cmd/katana-indexer
+   ```
+4. **Run a crawl (only the domain is required)**:
+   ```bash
+   ./bin/katana-indexer crawl --domain https://example.com
+   ```
+   This auto-creates a local database at `./katana-index/example.com/index.db` (based on the domain).
+5. **Start the search UI**:
+   ```bash
+   ./bin/katana-indexer serve --domain https://example.com --addr :8080
+   ```
+6. **Search your index**: open `http://localhost:8080` and search for keywords, tags, or descriptions.
+
 ## Performance notes
 
 - Increase `--fetch-workers` and `--max-connections` to fully utilize fast CPUs and high bandwidth.
