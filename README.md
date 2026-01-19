@@ -15,6 +15,9 @@ mkdir -p bin
 
 go build -o bin/katana-indexer ./cmd/katana-indexer
 
+# Windows (build an .exe)
+go build -o bin/katana-indexer.exe ./cmd/katana-indexer
+
 # Crawl a domain (non-headless by default)
 ./bin/katana-indexer crawl --domain https://example.com \
   --fetch-workers 128 --max-connections 512
@@ -25,6 +28,8 @@ go build -o bin/katana-indexer ./cmd/katana-indexer
 # Launch search UI
 ./bin/katana-indexer serve --domain https://example.com --addr :8080
 ```
+
+On Windows, run `bin\\katana-indexer.exe` instead of `./bin/katana-indexer`.
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
@@ -39,12 +44,17 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
    ```bash
    mkdir -p bin
    go build -o bin/katana-indexer ./cmd/katana-indexer
+   go build -o bin/katana-indexer.exe ./cmd/katana-indexer
    ```
 4. **Run a crawl (only the domain is required)**:
    ```bash
    ./bin/katana-indexer crawl --domain https://example.com
    ```
    This auto-creates a local database at `./katana-index/example.com/index.db` (based on the domain).
+   On Windows, use:
+   ```bash
+   bin\katana-indexer.exe crawl --domain https://example.com
+   ```
 5. **Start the search UI**:
    ```bash
    ./bin/katana-indexer serve --domain https://example.com --addr :8080
