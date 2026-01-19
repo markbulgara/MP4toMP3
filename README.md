@@ -40,6 +40,12 @@ If you prefer a single-click run, use the bundled launcher script:
 python launch_gui.py
 ```
 
+On Windows, you can double-click the batch file:
+
+```
+launch_gui.bat
+```
+
 ### Common options
 
 - `--max-pages 500` (default: 250)
