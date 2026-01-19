@@ -6,6 +6,7 @@ Usage examples:
   python universal_site_video_grid.py --base https://example.com
   python universal_site_video_grid.py --base https://example.com --max-pages 500 --concurrency 8 --delay 0.2
   python universal_site_video_grid.py --base https://example.com --use-playwright always --out report.html
+  python universal_site_video_grid.py --gui
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import logging
 import re
 import sys
 import time
+import threading
 from dataclasses import dataclass, field
 from html import escape
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -1080,7 +1082,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Crawl a site and generate a video grid report.")
-    parser.add_argument("--base", required=True, help="Base URL to crawl, e.g., https://example.com")
+    parser.add_argument("--base", help="Base URL to crawl, e.g., https://example.com")
     parser.add_argument("--max-pages", type=int, default=250, help="Maximum pages to crawl")
     parser.add_argument("--concurrency", type=int, default=6, help="Concurrent requests")
     parser.add_argument("--delay", type=float, default=0.15, help="Delay between request starts (seconds)")
@@ -1095,7 +1097,123 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--max-depth", type=int, default=3, help="Max depth for link crawl")
     parser.add_argument("--timeout", type=int, default=20, help="Request timeout in seconds")
     parser.add_argument("--user-agent", default=USER_AGENT_DEFAULT, help="User-Agent header")
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch a simple interactive GUI for entering crawl options",
+    )
     return parser.parse_args(argv)
+
+
+def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
+    import tkinter as tk
+    from tkinter import ttk, messagebox, scrolledtext
+
+    done_event = threading.Event()
+    args = parse_args([])
+
+    root = tk.Tk()
+    root.title("Universal Site Video Grid")
+    root.geometry("700x720")
+
+    frame = ttk.Frame(root, padding=16)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    def add_row(label: str, var: tk.Variable) -> None:
+        row = ttk.Frame(frame)
+        row.pack(fill=tk.X, pady=4)
+        ttk.Label(row, text=label, width=18).pack(side=tk.LEFT)
+        ttk.Entry(row, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    base_var = tk.StringVar()
+    out_var = tk.StringVar(value="report.html")
+    max_pages_var = tk.IntVar(value=250)
+    concurrency_var = tk.IntVar(value=6)
+    delay_var = tk.DoubleVar(value=0.15)
+    max_depth_var = tk.IntVar(value=3)
+    timeout_var = tk.IntVar(value=20)
+    user_agent_var = tk.StringVar(value=USER_AGENT_DEFAULT)
+    include_subdomains_var = tk.BooleanVar(value=False)
+    playwright_var = tk.StringVar(value="auto")
+
+    ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
+        anchor=tk.W, pady=(0, 8)
+    )
+    add_row("Base URL", base_var)
+    add_row("Output HTML", out_var)
+    add_row("Max pages", max_pages_var)
+    add_row("Concurrency", concurrency_var)
+    add_row("Delay (s)", delay_var)
+    add_row("Max depth", max_depth_var)
+    add_row("Timeout (s)", timeout_var)
+    add_row("User-Agent", user_agent_var)
+
+    subdomain_row = ttk.Frame(frame)
+    subdomain_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        subdomain_row, text="Include subdomains", variable=include_subdomains_var
+    ).pack(side=tk.LEFT)
+
+    mode_row = ttk.Frame(frame)
+    mode_row.pack(fill=tk.X, pady=4)
+    ttk.Label(mode_row, text="Playwright", width=18).pack(side=tk.LEFT)
+    ttk.Combobox(
+        mode_row,
+        textvariable=playwright_var,
+        values=["auto", "always", "never"],
+        state="readonly",
+        width=12,
+    ).pack(side=tk.LEFT)
+
+    log_box = scrolledtext.ScrolledText(frame, height=16, state="disabled")
+    log_box.pack(fill=tk.BOTH, expand=True, pady=(12, 8))
+
+    def log_line(message: str) -> None:
+        log_box.configure(state="normal")
+        log_box.insert(tk.END, message + "\n")
+        log_box.configure(state="disabled")
+        log_box.see(tk.END)
+
+    def run_crawl_from_gui() -> None:
+        if not base_var.get().strip():
+            messagebox.showerror("Missing base URL", "Please enter a base URL to crawl.")
+            return
+
+        args.base = base_var.get().strip()
+        args.out = out_var.get().strip() or "report.html"
+        args.max_pages = max_pages_var.get()
+        args.concurrency = concurrency_var.get()
+        args.delay = delay_var.get()
+        args.max_depth = max_depth_var.get()
+        args.timeout = timeout_var.get()
+        args.user_agent = user_agent_var.get().strip() or USER_AGENT_DEFAULT
+        args.include_subdomains = include_subdomains_var.get()
+        args.use_playwright = playwright_var.get()
+
+        log_line(f"Starting crawl for {args.base}")
+
+        def runner() -> None:
+            try:
+                asyncio.run(run_crawl(args))
+                log_line("Crawl completed.")
+                log_line(f"HTML report: {args.out}")
+                log_line(f"JSON report: {args.out.rsplit('.', 1)[0] + '.json'}")
+            except Exception as exc:
+                log_line(f"Error: {exc}")
+            finally:
+                done_event.set()
+
+        threading.Thread(target=runner, daemon=True).start()
+
+    ttk.Button(frame, text="Start crawl", command=run_crawl_from_gui).pack(pady=6)
+
+    def on_close() -> None:
+        root.destroy()
+        done_event.set()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.mainloop()
+    return done_event, args
 
 
 def main() -> int:
@@ -1105,6 +1223,11 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     try:
+        if args.gui:
+            build_gui()
+            return 0
+        if not args.base:
+            raise SystemExit("Error: --base is required unless --gui is used.")
         return asyncio.run(run_crawl(args))
     except KeyboardInterrupt:
         logging.info("Interrupted.")

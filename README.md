@@ -24,6 +24,14 @@ playwright install chromium
 python universal_site_video_grid.py --base https://example.com --out report.html
 ```
 
+## Interactive GUI
+
+Launch the built-in GUI to enter a base URL, tweak crawl options, and start the crawl from a button.
+
+```bash
+python universal_site_video_grid.py --gui
+```
+
 ### Common options
 
 - `--max-pages 500` (default: 250)
@@ -34,6 +42,19 @@ python universal_site_video_grid.py --base https://example.com --out report.html
 - `--max-depth 4` (default: 3)
 - `--timeout 20` (default: 20 seconds)
 - `--user-agent "UniversalVideoCrawler/1.0"`
+
+### Example advanced runs
+
+```bash
+# Crawl more pages with heavier rendering
+python universal_site_video_grid.py --base https://example.com --max-pages 500 --use-playwright always
+
+# Be conservative with request rate
+python universal_site_video_grid.py --base https://example.com --delay 0.5 --concurrency 2
+
+# Include subdomains and follow links deeper when sitemaps are sparse
+python universal_site_video_grid.py --base https://example.com --include-subdomains --max-depth 5
+```
 
 ## Output
 
