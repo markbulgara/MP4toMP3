@@ -161,15 +161,22 @@ def should_skip_url(
     cache: Dict[str, Any],
     keyword_targets: List[str],
     skip_known_misses: bool,
+    skip_known_hits: bool,
 ) -> bool:
-    if not skip_known_misses or not keyword_targets:
+    if not keyword_targets:
         return False
     entry = cache.get("urls", {}).get(url)
     if not entry:
         return False
     cached_keywords = entry.get("keywords", [])
     cached_matched = entry.get("matched")
-    return cached_keywords == sorted(keyword_targets) and not cached_matched
+    if cached_keywords != sorted(keyword_targets):
+        return False
+    if skip_known_hits and cached_matched:
+        return True
+    if skip_known_misses and not cached_matched:
+        return True
+    return False
 
 class RateLimiter:
     def __init__(self, delay: float) -> None:
@@ -1010,8 +1017,9 @@ async def process_page(
     keyword_filter_only: bool,
     cache: Dict[str, Any],
     skip_known_misses: bool,
+    skip_known_hits: bool,
 ) -> Optional[PageResult]:
-    if should_skip_url(url, cache, keyword_targets, skip_known_misses):
+    if should_skip_url(url, cache, keyword_targets, skip_known_misses, skip_known_hits):
         return None
     fetch = await fetch_url(client, url, limiter, semaphore, timeout)
     if not fetch.text:
@@ -1143,6 +1151,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 args.keyword_filter_only,
                 cache,
                 args.skip_known_misses,
+                args.skip_known_hits,
             )
             if res:
                 fetched += 1
@@ -1275,6 +1284,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip URLs that previously had no keyword matches",
     )
     parser.add_argument(
+        "--skip-known-hits",
+        action="store_true",
+        help="Skip URLs that already matched keywords (faster incremental runs)",
+    )
+    parser.add_argument(
         "--gui",
         action="store_true",
         help="Launch a simple interactive GUI for entering crawl options",
@@ -1285,6 +1299,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.include_keyword_matches = True
     if args.keywords and not args.skip_known_misses:
         args.skip_known_misses = True
+    if args.use_cached_urls and not args.skip_known_hits:
+        args.skip_known_hits = True
     if args.use_cached_urls and not args.use_cache:
         args.use_cache = True
     return args
@@ -1325,6 +1341,7 @@ def build_gui() -> None:
     use_cache_var = tk.BooleanVar(value=True)
     use_cached_urls_var = tk.BooleanVar(value=False)
     skip_known_misses_var = tk.BooleanVar(value=True)
+    skip_known_hits_var = tk.BooleanVar(value=True)
     cache_file_var = tk.StringVar(value="crawl_cache.json")
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
@@ -1383,6 +1400,14 @@ def build_gui() -> None:
         variable=skip_known_misses_var,
     ).pack(side=tk.LEFT)
 
+    hit_row = ttk.Frame(frame)
+    hit_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        hit_row,
+        text="Skip already-matched URLs (faster)",
+        variable=skip_known_hits_var,
+    ).pack(side=tk.LEFT)
+
     mode_row = ttk.Frame(frame)
     mode_row.pack(fill=tk.X, pady=4)
     ttk.Label(mode_row, text="Playwright", width=18).pack(side=tk.LEFT)
@@ -1424,6 +1449,7 @@ def build_gui() -> None:
         args.use_cache = use_cache_var.get()
         args.use_cached_urls = use_cached_urls_var.get() or use_cached
         args.skip_known_misses = skip_known_misses_var.get() or use_cached
+        args.skip_known_hits = skip_known_hits_var.get() or use_cached
         args.cache_file = cache_file_var.get().strip() or "crawl_cache.json"
 
         log_line(f"Starting crawl for {args.base}")

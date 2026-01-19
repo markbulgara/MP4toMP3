@@ -65,6 +65,7 @@ The batch launcher opens a console window so you can watch crawl progress logs.
 - `--use-cache` (enable cache for skipping known misses and reusing URL lists)
 - `--use-cached-urls` (reuse cached URL list for a domain to “look again” quickly)
 - `--skip-known-misses` (skip URLs that previously had no keyword matches)
+- `--skip-known-hits` (skip URLs that already matched keywords for faster rechecks)
 
 ### Example advanced runs
 
@@ -86,6 +87,9 @@ python universal_site_video_grid.py --base https://example.com --keywords "priva
 
 # Re-scan a domain using cached URLs while skipping known misses
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --use-cache --use-cached-urls --skip-known-misses
+
+# Fast incremental run that skips pages already matching keywords
+python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --use-cache --use-cached-urls --skip-known-hits
 ```
 
 ## Output
