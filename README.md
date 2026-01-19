@@ -54,6 +54,27 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
 - Pass extra Katana tuning flags with `--katana-args`.
 - Metadata fetches run in parallel and are limited to 2MB per page for speed.
 
+## Troubleshooting build errors
+
+If you see errors like **“missing go.sum entry”**, your Go module cache needs to download dependencies:
+
+```bash
+go mod tidy
+```
+
+If that does not resolve it, run:
+
+```bash
+go get github.com/mattn/go-sqlite3
+go get golang.org/x/net/html
+```
+
+Then rebuild:
+
+```bash
+go build -o bin/katana-indexer ./cmd/katana-indexer
+```
+
 ## Flags
 
 ### `crawl`
