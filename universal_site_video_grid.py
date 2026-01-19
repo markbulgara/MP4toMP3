@@ -125,6 +125,7 @@ class PageResult:
     description: Optional[str] = None
     keywords: List[str] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
+    matched_keywords: List[str] = field(default_factory=list)
     video_items: List[VideoItem] = field(default_factory=list)
     chosen_thumbnail_url: Optional[str] = None
     chosen_video_url: Optional[str] = None
@@ -322,6 +323,24 @@ def extract_meta(soup: BeautifulSoup) -> Dict[str, Any]:
     return meta
 
 
+def extract_text_content(soup: BeautifulSoup) -> str:
+    for element in soup(["script", "style", "noscript"]):
+        element.decompose()
+    return " ".join(soup.stripped_strings)
+
+
+def find_keyword_matches(text: str, candidates: Iterable[str]) -> List[str]:
+    matches: List[str] = []
+    lowered = text.lower()
+    for keyword in candidates:
+        clean = keyword.strip()
+        if not clean:
+            continue
+        if re.search(rf"\\b{re.escape(clean.lower())}\\b", lowered):
+            matches.append(clean)
+    return sorted(set(matches))
+
+
 def resolve_url(base: str, url: Optional[str]) -> Optional[str]:
     if not url:
         return None
@@ -507,6 +526,7 @@ def build_page_result(
     fetch_mode: str,
     status_code: Optional[int],
     content_type: Optional[str],
+    keyword_targets: List[str],
 ) -> PageResult:
     soup = BeautifulSoup(html, "lxml")
     meta = extract_meta(soup)
@@ -530,6 +550,11 @@ def build_page_result(
             keywords.extend([str(k).strip() for k in kw if str(k).strip()])
 
     tags = find_tags(soup)
+    text_content = extract_text_content(soup)
+    keyword_matches = find_keyword_matches(
+        " ".join([text_content, " ".join(tags), " ".join(keywords)]),
+        keyword_targets,
+    )
 
     video_items: List[VideoItem] = []
     for obj in json_ld:
@@ -590,6 +615,7 @@ def build_page_result(
         or meta.get("twitter:description"),
         keywords=sorted(set(keywords)),
         tags=tags,
+        matched_keywords=keyword_matches,
         video_items=video_items,
         chosen_thumbnail_url=thumb,
         chosen_video_url=choose_video_url(video_items),
@@ -598,6 +624,8 @@ def build_page_result(
         content_type=content_type,
         badges=badges,
     )
+    if keyword_matches:
+        result.badges.append("keyword")
     return result
 
 
@@ -621,21 +649,30 @@ def page_needs_playwright(html: str, meta: Dict[str, Any]) -> bool:
 
 def render_html_report(results: List[PageResult], stats: Dict[str, Any], output_path: str) -> None:
     cards = []
+    placeholder = (
+        "data:image/svg+xml;utf8,"
+        "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'>"
+        "<rect width='100%' height='100%' fill='%23e5e7eb'/>"
+        "<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' "
+        "fill='%236b7280' font-family='Arial' font-size='20'>No thumbnail</text>"
+        "</svg>"
+    )
     for result in results:
-        if not result.video_items:
-            continue
-        thumb = result.chosen_thumbnail_url or ""
+        thumb = result.chosen_thumbnail_url or placeholder
         title = result.page_title or result.page_url
         keywords = ", ".join(result.keywords or result.tags)
+        matched = ", ".join(result.matched_keywords)
         badges = " ".join(f"<span class=\"badge\">{escape(b)}</span>" for b in result.badges)
         video_urls = "<br>".join(
             escape(item.video_url)
             for item in result.video_items[:2]
             if item.video_url
         )
+        if not video_urls and result.matched_keywords:
+            video_urls = "<em>No video detected</em>"
         cards.append(
             f"""
-            <div class=\"card\" data-search=\"{escape((title + ' ' + result.page_url + ' ' + keywords).lower())}\">
+            <div class=\"card\" data-search=\"{escape((title + ' ' + result.page_url + ' ' + keywords + ' ' + matched).lower())}\">
                 <a href=\"{escape(result.page_url)}\" target=\"_blank\">
                     <img src=\"{escape(thumb)}\" alt=\"thumbnail\" loading=\"lazy\">
                 </a>
@@ -644,6 +681,7 @@ def render_html_report(results: List[PageResult], stats: Dict[str, Any], output_
                     <p class=\"url\"><a href=\"{escape(result.page_url)}\" target=\"_blank\">{escape(result.page_url)}</a></p>
                     <p class=\"videos\">{video_urls}</p>
                     <p class=\"keywords\">{escape(keywords)}</p>
+                    <p class=\"keywords\">{escape(matched)}</p>
                     <div class=\"badges\">{badges}</div>
                 </div>
             </div>
@@ -683,6 +721,7 @@ header p {{ margin: 4px 0; }}
   <p>Pages fetched: {stats.get('fetched')}</p>
   <p>Rendered with Playwright: {stats.get('playwright')}</p>
   <p>Pages with videos: {stats.get('with_videos')}</p>
+  <p>Keyword matches: {stats.get('keyword_matches')}</p>
   <p><a href="report.json" style="color:#93c5fd;">Download JSON</a></p>
   <div class=\"search\">
     <input id=\"search\" type=\"text\" placeholder=\"Search by title, URL, keywords...\">
@@ -917,6 +956,7 @@ async def process_page(
     playwright_semaphore: Optional[asyncio.Semaphore],
     use_playwright: str,
     timeout: float,
+    keyword_targets: List[str],
 ) -> Optional[PageResult]:
     fetch = await fetch_url(client, url, limiter, semaphore, timeout)
     if not fetch.text:
@@ -947,7 +987,9 @@ async def process_page(
                 html = rendered
                 fetch_mode = "playwright"
 
-    result = build_page_result(url, html, fetch_mode, fetch.status_code, fetch.content_type)
+    result = build_page_result(
+        url, html, fetch_mode, fetch.status_code, fetch.content_type, keyword_targets
+    )
     result.video_items = dedupe_video_items(result.video_items)
     return result
 
@@ -1017,6 +1059,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 playwright_semaphore,
                 args.use_playwright,
                 args.timeout,
+                args.keywords,
             )
             if res:
                 fetched += 1
@@ -1045,12 +1088,18 @@ async def run_crawl(args: argparse.Namespace) -> int:
             await playwright_browser.close()
             await playwright.stop()
 
-    with_videos = [result for result in results if result.video_items]
+    with_videos = [
+        result
+        for result in results
+        if result.video_items or (args.include_keyword_matches and result.matched_keywords)
+    ]
+    keyword_matches = [result for result in results if result.matched_keywords]
     stats = {
         "discovered": len(urls),
         "fetched": fetched,
         "playwright": rendered,
-        "with_videos": len(with_videos),
+        "with_videos": len([r for r in results if r.video_items]),
+        "keyword_matches": len(keyword_matches),
     }
 
     json_path = args.out.rsplit(".", 1)[0] + ".json"
@@ -1062,6 +1111,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
             "description": result.description,
             "keywords": result.keywords,
             "tags": result.tags,
+            "matched_keywords": result.matched_keywords,
             "video_items": [item.__dict__ for item in result.video_items],
             "chosen_thumbnail_url": result.chosen_thumbnail_url,
             "chosen_video_url": result.chosen_video_url,
@@ -1098,11 +1148,25 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=20, help="Request timeout in seconds")
     parser.add_argument("--user-agent", default=USER_AGENT_DEFAULT, help="User-Agent header")
     parser.add_argument(
+        "--keywords",
+        default="",
+        help="Comma-separated keywords to match in page text/tags (e.g., \"pricing,private beta\")",
+    )
+    parser.add_argument(
+        "--include-keyword-matches",
+        action="store_true",
+        help="Include pages that match keywords even if no videos are detected",
+    )
+    parser.add_argument(
         "--gui",
         action="store_true",
         help="Launch a simple interactive GUI for entering crawl options",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.keywords = [item.strip() for item in args.keywords.split(",") if item.strip()]
+    if args.keywords and not args.include_keyword_matches:
+        args.include_keyword_matches = True
+    return args
 
 
 def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
@@ -1135,6 +1199,8 @@ def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
     user_agent_var = tk.StringVar(value=USER_AGENT_DEFAULT)
     include_subdomains_var = tk.BooleanVar(value=False)
     playwright_var = tk.StringVar(value="auto")
+    keywords_var = tk.StringVar()
+    include_keyword_var = tk.BooleanVar(value=True)
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
         anchor=tk.W, pady=(0, 8)
@@ -1147,11 +1213,20 @@ def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
     add_row("Max depth", max_depth_var)
     add_row("Timeout (s)", timeout_var)
     add_row("User-Agent", user_agent_var)
+    add_row("Keywords", keywords_var)
 
     subdomain_row = ttk.Frame(frame)
     subdomain_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         subdomain_row, text="Include subdomains", variable=include_subdomains_var
+    ).pack(side=tk.LEFT)
+
+    keyword_row = ttk.Frame(frame)
+    keyword_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        keyword_row,
+        text="Include keyword matches without videos",
+        variable=include_keyword_var,
     ).pack(side=tk.LEFT)
 
     mode_row = ttk.Frame(frame)
@@ -1189,6 +1264,8 @@ def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
         args.user_agent = user_agent_var.get().strip() or USER_AGENT_DEFAULT
         args.include_subdomains = include_subdomains_var.get()
         args.use_playwright = playwright_var.get()
+        args.keywords = [item.strip() for item in keywords_var.get().split(",") if item.strip()]
+        args.include_keyword_matches = include_keyword_var.get() or bool(args.keywords)
 
         log_line(f"Starting crawl for {args.base}")
 

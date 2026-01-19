@@ -42,6 +42,8 @@ python universal_site_video_grid.py --gui
 - `--max-depth 4` (default: 3)
 - `--timeout 20` (default: 20 seconds)
 - `--user-agent "UniversalVideoCrawler/1.0"`
+- `--keywords "pricing,private beta"` (comma-separated keyword matches)
+- `--include-keyword-matches` (include pages with keyword matches even without videos)
 
 ### Example advanced runs
 
@@ -54,6 +56,9 @@ python universal_site_video_grid.py --base https://example.com --delay 0.5 --con
 
 # Include subdomains and follow links deeper when sitemaps are sparse
 python universal_site_video_grid.py --base https://example.com --include-subdomains --max-depth 5
+
+# Hunt for pages mentioning specific keywords
+python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --include-keyword-matches
 ```
 
 ## Output
