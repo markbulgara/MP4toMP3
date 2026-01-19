@@ -1075,7 +1075,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
 
         cached_domain_urls = cache.get("domains", {}).get(base_host, [])
         if args.use_cached_urls and cached_domain_urls:
-            urls = cached_domain_urls
+            urls = cached_domain_urls[: args.max_pages]
         else:
             urls = await discover_urls(
                 client,
