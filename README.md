@@ -16,11 +16,11 @@ mkdir -p bin
 go build -o bin/katana-indexer ./cmd/katana-indexer
 
 # Crawl a domain (non-headless by default)
-./bin/katana-indexer crawl --domain https://example.com --db data/index.db \
+./bin/katana-indexer crawl --domain https://example.com \
   --fetch-workers 128 --max-connections 512
 
 # Launch search UI
-./bin/katana-indexer serve --db data/index.db --addr :8080
+./bin/katana-indexer serve --domain https://example.com --addr :8080
 ```
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
@@ -36,7 +36,7 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
 ### `crawl`
 
 - `--domain`: Domain or URL to crawl (required).
-- `--db`: SQLite database path.
+- `--db`: SQLite database path (auto-generated when empty).
 - `--katana-path`: Path to the Katana binary.
 - `--katana-args`: Extra arguments passed directly to Katana.
 - `--fetch-workers`: Parallel metadata fetch workers.
@@ -46,5 +46,6 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
 
 ### `serve`
 
-- `--db`: SQLite database path.
+- `--db`: SQLite database path (auto-generated when empty).
+- `--domain`: Domain or URL that was crawled (used to locate the database).
 - `--addr`: Address to serve the UI.

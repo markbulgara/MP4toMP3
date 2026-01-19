@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,7 +34,7 @@ func main() {
 func runCrawl(args []string) {
 	fs := flag.NewFlagSet("crawl", flag.ExitOnError)
 	domain := fs.String("domain", "", "Domain or URL to crawl")
-	dbPath := fs.String("db", "data/index.db", "SQLite database path")
+	dbPath := fs.String("db", "", "SQLite database path (auto-generated when empty)")
 	katanaPath := fs.String("katana-path", "katana", "Path to katana binary")
 	katanaArgs := fs.String("katana-args", "", "Extra katana args (space separated)")
 	fetchWorkers := fs.Int("fetch-workers", 64, "Parallel metadata fetch workers")
@@ -47,10 +49,16 @@ func runCrawl(args []string) {
 		os.Exit(1)
 	}
 
+	resolvedDBPath, err := ensureDBPath(*domain, *dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build database path: %v\n", err)
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 	opts := crawler.Options{
 		Domain:         *domain,
-		DBPath:         *dbPath,
+		DBPath:         resolvedDBPath,
 		KatanaPath:     *katanaPath,
 		KatanaArgs:     strings.Fields(*katanaArgs),
 		FetchWorkers:   *fetchWorkers,
@@ -67,11 +75,24 @@ func runCrawl(args []string) {
 
 func runServe(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	dbPath := fs.String("db", "data/index.db", "SQLite database path")
+	domain := fs.String("domain", "", "Domain or URL that was crawled (used to locate the database)")
+	dbPath := fs.String("db", "", "SQLite database path (auto-generated when empty)")
 	addr := fs.String("addr", ":8080", "Address to serve the search UI")
 	fs.Parse(args)
 
-	if err := server.Serve(*dbPath, *addr); err != nil {
+	if *dbPath == "" && *domain == "" {
+		fmt.Println("either -domain or -db is required")
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	resolvedDBPath, err := ensureDBPath(*domain, *dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build database path: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := server.Serve(resolvedDBPath, *addr); err != nil {
 		fmt.Fprintf(os.Stderr, "server failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -82,10 +103,60 @@ func printUsage() {
 
 Usage:
   katana-indexer crawl --domain https://example.com --db data/index.db
-  katana-indexer serve --db data/index.db --addr :8080
+  katana-indexer serve --domain https://example.com --addr :8080
 
 Commands:
   crawl   Run katana crawler and collect metadata.
   serve   Launch search UI for indexed metadata.
 `)
+}
+
+func ensureDBPath(domain string, explicitPath string) (string, error) {
+	if explicitPath != "" {
+		if err := os.MkdirAll(filepath.Dir(explicitPath), 0o755); err != nil {
+			return "", err
+		}
+		return explicitPath, nil
+	}
+
+	if domain == "" {
+		return "", fmt.Errorf("domain is required to auto-generate db path")
+	}
+
+	parsed, err := url.Parse(domain)
+	if err != nil || parsed.Host == "" {
+		parsed = &url.URL{Host: domain}
+	}
+	safeDomain := sanitizeName(parsed.Host)
+	if safeDomain == "" {
+		safeDomain = "target"
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	baseDir := filepath.Join(wd, "katana-index")
+	dbDir := filepath.Join(baseDir, safeDomain)
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dbDir, "index.db"), nil
+}
+
+func sanitizeName(value string) string {
+	builder := strings.Builder{}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			continue
+		}
+		if r == '-' || r == '_' || r == '.' {
+			builder.WriteRune(r)
+			continue
+		}
+		builder.WriteRune('_')
+	}
+	return strings.Trim(builder.String(), "_")
 }
