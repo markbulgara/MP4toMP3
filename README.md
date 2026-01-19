@@ -19,6 +19,9 @@ go build -o bin/katana-indexer ./cmd/katana-indexer
 ./bin/katana-indexer crawl --domain https://example.com \
   --fetch-workers 128 --max-connections 512
 
+# Crawl and start the search UI immediately
+./bin/katana-indexer crawl --domain https://example.com --serve --serve-addr :8080
+
 # Launch search UI
 ./bin/katana-indexer serve --domain https://example.com --addr :8080
 ```
@@ -47,6 +50,12 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
    ./bin/katana-indexer serve --domain https://example.com --addr :8080
    ```
 6. **Search your index**: open `http://localhost:8080` and search for keywords, tags, or descriptions.
+7. **Want the UI immediately?** Run crawl with `--serve`:
+   ```bash
+   ./bin/katana-indexer crawl --domain https://example.com --serve --serve-addr :8080
+   ```
+
+> **Note (Windows)**: Katana runs non-headless and may prompt you to choose a browser the first time. Pick Chrome or Edge and set it as the default so the crawl continues without asking again.
 
 ## Performance notes
 
@@ -87,6 +96,8 @@ go build -o bin/katana-indexer ./cmd/katana-indexer
 - `--timeout`: Timeout per metadata request.
 - `--user-agent`: Custom User-Agent for metadata requests.
 - `--max-connections`: Max metadata fetch connections.
+- `--serve`: Start the search UI while crawling.
+- `--serve-addr`: Address for the search UI when `--serve` is enabled.
 
 ### `serve`
 

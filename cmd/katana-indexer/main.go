@@ -41,6 +41,8 @@ func runCrawl(args []string) {
 	timeout := fs.Duration("timeout", 20*time.Second, "Metadata fetch timeout")
 	userAgent := fs.String("user-agent", "", "Custom User-Agent for metadata fetch")
 	maxConnections := fs.Int("max-connections", 512, "Max connections for metadata fetch")
+	serveUI := fs.Bool("serve", false, "Start the search UI while crawling")
+	serveAddr := fs.String("serve-addr", ":8080", "Address for the search UI when -serve is enabled")
 	fs.Parse(args)
 
 	if *domain == "" {
@@ -53,6 +55,14 @@ func runCrawl(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to build database path: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *serveUI {
+		go func() {
+			if err := server.Serve(resolvedDBPath, *serveAddr); err != nil {
+				fmt.Fprintf(os.Stderr, "server failed: %v\n", err)
+			}
+		}()
 	}
 
 	ctx := context.Background()
@@ -102,7 +112,7 @@ func printUsage() {
 	fmt.Println(`katana-indexer
 
 Usage:
-  katana-indexer crawl --domain https://example.com --db data/index.db
+  katana-indexer crawl --domain https://example.com --serve
   katana-indexer serve --domain https://example.com --addr :8080
 
 Commands:
