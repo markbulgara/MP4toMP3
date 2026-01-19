@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import queue
 import re
 import sys
 import time
@@ -1135,7 +1136,11 @@ async def process_page(
     return result
 
 
-async def run_crawl(args: argparse.Namespace) -> int:
+async def run_crawl(
+    args: argparse.Namespace,
+    stop_event: Optional[threading.Event] = None,
+    progress_callback: Optional[Any] = None,
+) -> int:
     logging.info("Starting crawl for %s", args.base)
     base = args.base.rstrip("/")
     parsed_base = urlparse(base)
@@ -1214,9 +1219,11 @@ async def run_crawl(args: argparse.Namespace) -> int:
         results: List[PageResult] = []
         fetched = 0
         rendered = 0
+        processed = 0
+        total = len(urls)
 
         async def handle_url(target: str) -> None:
-            nonlocal fetched, rendered
+            nonlocal fetched, rendered, processed
             res = await process_page(
                 target,
                 client,
@@ -1233,6 +1240,9 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 args.skip_known_hits,
                 args.metadata_only,
             )
+            processed += 1
+            if progress_callback:
+                progress_callback(processed, total)
             if res:
                 fetched += 1
                 if res.fetch_mode == "playwright":
@@ -1249,10 +1259,14 @@ async def run_crawl(args: argparse.Namespace) -> int:
 
         tasks: List[asyncio.Task[None]] = []
         for target_url in urls:
+            if stop_event and stop_event.is_set():
+                break
             tasks.append(asyncio.create_task(handle_url(target_url)))
             if len(tasks) >= args.concurrency:
                 await asyncio.gather(*tasks)
                 tasks = []
+                if stop_event and stop_event.is_set():
+                    break
         if tasks:
             await asyncio.gather(*tasks)
 
@@ -1567,19 +1581,53 @@ def build_gui() -> None:
         width=12,
     ).pack(side=tk.LEFT)
 
-    log_box = scrolledtext.ScrolledText(frame, height=14, state="disabled")
+    log_box = scrolledtext.ScrolledText(frame, height=12, state="disabled")
     log_box.pack(fill=tk.BOTH, expand=True, pady=(12, 8))
+    progress_row = ttk.Frame(frame)
+    progress_row.pack(fill=tk.X, pady=(0, 8))
+    progress_label = ttk.Label(progress_row, text="Progress: 0/0")
+    progress_label.pack(side=tk.LEFT)
+    progress_bar = ttk.Progressbar(progress_row, length=300, mode="determinate")
+    progress_bar.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
+
+    message_queue: "queue.Queue[Tuple[str, Optional[Tuple[int, int]]]]" = queue.Queue()
+    stop_event = threading.Event()
+    running_flag = {"active": False}
 
     def log_line(message: str) -> None:
-        log_box.configure(state="normal")
-        log_box.insert(tk.END, message + "\n")
-        log_box.configure(state="disabled")
-        log_box.see(tk.END)
+        message_queue.put((message, None))
+
+    def update_progress(processed: int, total: int) -> None:
+        message_queue.put(("", (processed, total)))
+
+    def poll_queue() -> None:
+        while True:
+            try:
+                message, progress = message_queue.get_nowait()
+            except queue.Empty:
+                break
+            if message:
+                log_box.configure(state="normal")
+                log_box.insert(tk.END, message + "\n")
+                log_box.configure(state="disabled")
+                log_box.see(tk.END)
+            if progress:
+                processed, total = progress
+                progress_label.configure(text=f"Progress: {processed}/{total}")
+                progress_bar.configure(maximum=max(total, 1), value=processed)
+        root.after(200, poll_queue)
+
+    poll_queue()
 
     def run_crawl_from_gui(use_cached: bool = False) -> None:
         if not base_var.get().strip():
             messagebox.showerror("Missing base URL", "Please enter a base URL to crawl.")
             return
+        if running_flag["active"]:
+            log_line("Crawl already running.")
+            return
+        stop_event.clear()
+        running_flag["active"] = True
 
         args.base = base_var.get().strip()
         args.out = out_var.get().strip() or "report.html"
@@ -1609,12 +1657,14 @@ def build_gui() -> None:
 
         def runner() -> None:
             try:
-                asyncio.run(run_crawl(args))
+                asyncio.run(run_crawl(args, stop_event=stop_event, progress_callback=update_progress))
                 log_line("Crawl completed.")
                 log_line(f"HTML report: {args.out}")
                 log_line(f"JSON report: {args.out.rsplit('.', 1)[0] + '.json'}")
             except Exception as exc:
                 log_line(f"Error: {exc}")
+            finally:
+                running_flag["active"] = False
         threading.Thread(target=runner, daemon=True).start()
 
     button_row = ttk.Frame(frame)
@@ -1624,6 +1674,11 @@ def build_gui() -> None:
         button_row,
         text="Look again",
         command=lambda: run_crawl_from_gui(use_cached=True),
+    ).pack(side=tk.LEFT, padx=4)
+    ttk.Button(
+        button_row,
+        text="Stop early",
+        command=lambda: (stop_event.set(), log_line("Stop requested; finishing current tasks.")),
     ).pack(side=tk.LEFT, padx=4)
 
     def on_close() -> None:
