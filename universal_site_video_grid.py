@@ -341,6 +341,20 @@ def find_keyword_matches(text: str, candidates: Iterable[str]) -> List[str]:
     return sorted(set(matches))
 
 
+def quick_keyword_matches(html: str, candidates: Iterable[str]) -> List[str]:
+    if not candidates:
+        return []
+    lowered = html.lower()
+    matches: List[str] = []
+    for keyword in candidates:
+        clean = keyword.strip()
+        if not clean:
+            continue
+        if clean.lower() in lowered:
+            matches.append(clean)
+    return sorted(set(matches))
+
+
 def resolve_url(base: str, url: Optional[str]) -> Optional[str]:
     if not url:
         return None
@@ -957,10 +971,15 @@ async def process_page(
     use_playwright: str,
     timeout: float,
     keyword_targets: List[str],
+    keyword_filter_only: bool,
 ) -> Optional[PageResult]:
     fetch = await fetch_url(client, url, limiter, semaphore, timeout)
     if not fetch.text:
         return None
+    if keyword_filter_only and keyword_targets:
+        quick_matches = quick_keyword_matches(fetch.text, keyword_targets)
+        if not quick_matches:
+            return None
     meta = extract_meta(BeautifulSoup(fetch.text, "lxml"))
     html = fetch.text
     fetch_mode = "http"
@@ -1059,6 +1078,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 args.use_playwright,
                 args.timeout,
                 args.keywords,
+                args.keyword_filter_only,
             )
             if res:
                 fetched += 1
@@ -1152,6 +1172,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Comma-separated keywords to match in page text/tags (e.g., \"pricing,private beta\")",
     )
     parser.add_argument(
+        "--keyword-filter-only",
+        action="store_true",
+        help="Skip pages without keyword matches to speed up crawls",
+    )
+    parser.add_argument(
         "--include-keyword-matches",
         action="store_true",
         help="Include pages that match keywords even if no videos are detected",
@@ -1199,6 +1224,7 @@ def build_gui() -> None:
     playwright_var = tk.StringVar(value="auto")
     keywords_var = tk.StringVar()
     include_keyword_var = tk.BooleanVar(value=True)
+    keyword_filter_only_var = tk.BooleanVar(value=False)
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
         anchor=tk.W, pady=(0, 8)
@@ -1225,6 +1251,14 @@ def build_gui() -> None:
         keyword_row,
         text="Include keyword matches without videos",
         variable=include_keyword_var,
+    ).pack(side=tk.LEFT)
+
+    filter_row = ttk.Frame(frame)
+    filter_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        filter_row,
+        text="Only keep pages with keyword matches (faster)",
+        variable=keyword_filter_only_var,
     ).pack(side=tk.LEFT)
 
     mode_row = ttk.Frame(frame)
@@ -1264,6 +1298,7 @@ def build_gui() -> None:
         args.use_playwright = playwright_var.get()
         args.keywords = [item.strip() for item in keywords_var.get().split(",") if item.strip()]
         args.include_keyword_matches = include_keyword_var.get() or bool(args.keywords)
+        args.keyword_filter_only = keyword_filter_only_var.get()
 
         log_line(f"Starting crawl for {args.base}")
 

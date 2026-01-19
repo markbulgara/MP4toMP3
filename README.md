@@ -52,6 +52,7 @@ python launch_gui.py
 - `--user-agent "UniversalVideoCrawler/1.0"`
 - `--keywords "pricing,private beta"` (comma-separated keyword matches)
 - `--include-keyword-matches` (include pages with keyword matches even without videos)
+- `--keyword-filter-only` (skip pages without keyword matches for faster crawls)
 
 ### Example advanced runs
 
@@ -67,6 +68,9 @@ python universal_site_video_grid.py --base https://example.com --include-subdoma
 
 # Hunt for pages mentioning specific keywords
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --include-keyword-matches
+
+# Speed up by only keeping keyword matches
+python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --keyword-filter-only
 ```
 
 ## Output
