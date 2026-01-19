@@ -46,7 +46,7 @@ On Windows, you can double-click the batch file:
 launch_gui.bat
 ```
 
-The batch launcher uses `pythonw` if available to avoid opening a console window.
+The batch launcher opens a console window so you can watch crawl progress logs.
 
 ### Common options
 
