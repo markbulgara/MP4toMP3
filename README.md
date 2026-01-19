@@ -32,6 +32,14 @@ Launch the built-in GUI to enter a base URL, tweak crawl options, and start the 
 python universal_site_video_grid.py --gui
 ```
 
+### One-click GUI launcher
+
+If you prefer a single-click run, use the bundled launcher script:
+
+```bash
+python launch_gui.py
+```
+
 ### Common options
 
 - `--max-pages 500` (default: 250)

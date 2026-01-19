@@ -1000,7 +1000,6 @@ async def run_crawl(args: argparse.Namespace) -> int:
     parsed_base = urlparse(base)
     if not parsed_base.scheme:
         base = "https://" + base
-    base_host = urlparse(base).netloc.lower()
 
     limiter = RateLimiter(args.delay)
     semaphore = asyncio.Semaphore(args.concurrency)
@@ -1169,11 +1168,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return args
 
 
-def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
+def build_gui() -> None:
     import tkinter as tk
     from tkinter import ttk, messagebox, scrolledtext
 
-    done_event = threading.Event()
     args = parse_args([])
 
     root = tk.Tk()
@@ -1277,20 +1275,15 @@ def build_gui() -> "tuple[threading.Event, argparse.Namespace]":
                 log_line(f"JSON report: {args.out.rsplit('.', 1)[0] + '.json'}")
             except Exception as exc:
                 log_line(f"Error: {exc}")
-            finally:
-                done_event.set()
-
         threading.Thread(target=runner, daemon=True).start()
 
     ttk.Button(frame, text="Start crawl", command=run_crawl_from_gui).pack(pady=6)
 
     def on_close() -> None:
         root.destroy()
-        done_event.set()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
-    return done_event, args
 
 
 def main() -> int:
