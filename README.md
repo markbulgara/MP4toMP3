@@ -61,6 +61,10 @@ The batch launcher uses `pythonw` if available to avoid opening a console window
 - `--keywords "pricing,private beta"` (comma-separated keyword matches)
 - `--include-keyword-matches` (include pages with keyword matches even without videos)
 - `--keyword-filter-only` (skip pages without keyword matches for faster crawls)
+- `--cache-file crawl_cache.json` (cache file for keyword hits/misses)
+- `--use-cache` (enable cache for skipping known misses and reusing URL lists)
+- `--use-cached-urls` (reuse cached URL list for a domain to “look again” quickly)
+- `--skip-known-misses` (skip URLs that previously had no keyword matches)
 
 ### Example advanced runs
 
@@ -79,6 +83,9 @@ python universal_site_video_grid.py --base https://example.com --keywords "priva
 
 # Speed up by only keeping keyword matches
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --keyword-filter-only
+
+# Re-scan a domain using cached URLs while skipping known misses
+python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --use-cache --use-cached-urls --skip-known-misses
 ```
 
 ## Output

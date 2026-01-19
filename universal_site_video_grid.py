@@ -134,6 +134,42 @@ class PageResult:
     content_type: Optional[str] = None
     badges: List[str] = field(default_factory=list)
 
+@dataclass
+class CacheEntry:
+    keywords: List[str]
+    matched: bool
+    timestamp: float
+
+
+def load_cache(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        return {"urls": {}, "domains": {}}
+    except Exception:
+        return {"urls": {}, "domains": {}}
+
+
+def save_cache(path: str, cache: Dict[str, Any]) -> None:
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(cache, handle, indent=2)
+
+
+def should_skip_url(
+    url: str,
+    cache: Dict[str, Any],
+    keyword_targets: List[str],
+    skip_known_misses: bool,
+) -> bool:
+    if not skip_known_misses or not keyword_targets:
+        return False
+    entry = cache.get("urls", {}).get(url)
+    if not entry:
+        return False
+    cached_keywords = entry.get("keywords", [])
+    cached_matched = entry.get("matched")
+    return cached_keywords == sorted(keyword_targets) and not cached_matched
 
 class RateLimiter:
     def __init__(self, delay: float) -> None:
@@ -972,7 +1008,11 @@ async def process_page(
     timeout: float,
     keyword_targets: List[str],
     keyword_filter_only: bool,
+    cache: Dict[str, Any],
+    skip_known_misses: bool,
 ) -> Optional[PageResult]:
+    if should_skip_url(url, cache, keyword_targets, skip_known_misses):
+        return None
     fetch = await fetch_url(client, url, limiter, semaphore, timeout)
     if not fetch.text:
         return None
@@ -1023,6 +1063,9 @@ async def run_crawl(args: argparse.Namespace) -> int:
     limiter = RateLimiter(args.delay)
     semaphore = asyncio.Semaphore(args.concurrency)
 
+    cache = load_cache(args.cache_file) if args.use_cache else {"urls": {}, "domains": {}}
+    base_host = urlparse(base).netloc.lower()
+
     async with httpx.AsyncClient(headers={"User-Agent": args.user_agent}, follow_redirects=True) as client:
         robots = RobotsRules([])
         robots_url = urljoin(base, "/robots.txt")
@@ -1030,17 +1073,22 @@ async def run_crawl(args: argparse.Namespace) -> int:
         if robots_response.text:
             robots = parse_robots(robots_response.text)
 
-        urls = await discover_urls(
-            client,
-            base,
-            args.max_pages,
-            args.include_subdomains,
-            robots,
-            args.max_depth,
-            limiter,
-            semaphore,
-            args.timeout,
-        )
+        cached_domain_urls = cache.get("domains", {}).get(base_host, [])
+        if args.use_cached_urls and cached_domain_urls:
+            urls = cached_domain_urls
+        else:
+            urls = await discover_urls(
+                client,
+                base,
+                args.max_pages,
+                args.include_subdomains,
+                robots,
+                args.max_depth,
+                limiter,
+                semaphore,
+                args.timeout,
+            )
+            cache.setdefault("domains", {})[base_host] = urls
 
         logging.info("Discovered %s URLs", len(urls))
 
@@ -1079,6 +1127,8 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 args.timeout,
                 args.keywords,
                 args.keyword_filter_only,
+                cache,
+                args.skip_known_misses,
             )
             if res:
                 fetched += 1
@@ -1102,6 +1152,15 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 tasks = []
         if tasks:
             await asyncio.gather(*tasks)
+
+        if args.use_cache:
+            for result in results:
+                cache.setdefault("urls", {})[result.page_url] = {
+                    "keywords": sorted(args.keywords),
+                    "matched": bool(result.matched_keywords),
+                    "timestamp": time.time(),
+                }
+            save_cache(args.cache_file, cache)
 
         if playwright_browser:
             await playwright_browser.close()
@@ -1182,6 +1241,26 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Include pages that match keywords even if no videos are detected",
     )
     parser.add_argument(
+        "--cache-file",
+        default="crawl_cache.json",
+        help="Cache file for remembering URL keyword matches",
+    )
+    parser.add_argument(
+        "--use-cache",
+        action="store_true",
+        help="Use cache to skip known misses and reuse URL lists",
+    )
+    parser.add_argument(
+        "--use-cached-urls",
+        action="store_true",
+        help="Use cached URL list for the domain instead of rediscovering",
+    )
+    parser.add_argument(
+        "--skip-known-misses",
+        action="store_true",
+        help="Skip URLs that previously had no keyword matches",
+    )
+    parser.add_argument(
         "--gui",
         action="store_true",
         help="Launch a simple interactive GUI for entering crawl options",
@@ -1190,6 +1269,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     args.keywords = [item.strip() for item in args.keywords.split(",") if item.strip()]
     if args.keywords and not args.include_keyword_matches:
         args.include_keyword_matches = True
+    if args.keywords and not args.skip_known_misses:
+        args.skip_known_misses = True
+    if args.use_cached_urls and not args.use_cache:
+        args.use_cache = True
     return args
 
 
@@ -1225,6 +1308,10 @@ def build_gui() -> None:
     keywords_var = tk.StringVar()
     include_keyword_var = tk.BooleanVar(value=True)
     keyword_filter_only_var = tk.BooleanVar(value=False)
+    use_cache_var = tk.BooleanVar(value=True)
+    use_cached_urls_var = tk.BooleanVar(value=False)
+    skip_known_misses_var = tk.BooleanVar(value=True)
+    cache_file_var = tk.StringVar(value="crawl_cache.json")
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
         anchor=tk.W, pady=(0, 8)
@@ -1238,6 +1325,7 @@ def build_gui() -> None:
     add_row("Timeout (s)", timeout_var)
     add_row("User-Agent", user_agent_var)
     add_row("Keywords", keywords_var)
+    add_row("Cache file", cache_file_var)
 
     subdomain_row = ttk.Frame(frame)
     subdomain_row.pack(fill=tk.X, pady=4)
@@ -1261,6 +1349,26 @@ def build_gui() -> None:
         variable=keyword_filter_only_var,
     ).pack(side=tk.LEFT)
 
+    cache_row = ttk.Frame(frame)
+    cache_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(cache_row, text="Enable cache", variable=use_cache_var).pack(side=tk.LEFT)
+
+    cached_urls_row = ttk.Frame(frame)
+    cached_urls_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        cached_urls_row,
+        text="Use cached URLs for this domain (look again)",
+        variable=use_cached_urls_var,
+    ).pack(side=tk.LEFT)
+
+    skip_row = ttk.Frame(frame)
+    skip_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        skip_row,
+        text="Skip known keyword misses",
+        variable=skip_known_misses_var,
+    ).pack(side=tk.LEFT)
+
     mode_row = ttk.Frame(frame)
     mode_row.pack(fill=tk.X, pady=4)
     ttk.Label(mode_row, text="Playwright", width=18).pack(side=tk.LEFT)
@@ -1281,7 +1389,7 @@ def build_gui() -> None:
         log_box.configure(state="disabled")
         log_box.see(tk.END)
 
-    def run_crawl_from_gui() -> None:
+    def run_crawl_from_gui(use_cached: bool = False) -> None:
         if not base_var.get().strip():
             messagebox.showerror("Missing base URL", "Please enter a base URL to crawl.")
             return
@@ -1299,6 +1407,10 @@ def build_gui() -> None:
         args.keywords = [item.strip() for item in keywords_var.get().split(",") if item.strip()]
         args.include_keyword_matches = include_keyword_var.get() or bool(args.keywords)
         args.keyword_filter_only = keyword_filter_only_var.get()
+        args.use_cache = use_cache_var.get()
+        args.use_cached_urls = use_cached_urls_var.get() or use_cached
+        args.skip_known_misses = skip_known_misses_var.get() or use_cached
+        args.cache_file = cache_file_var.get().strip() or "crawl_cache.json"
 
         log_line(f"Starting crawl for {args.base}")
 
@@ -1312,7 +1424,14 @@ def build_gui() -> None:
                 log_line(f"Error: {exc}")
         threading.Thread(target=runner, daemon=True).start()
 
-    ttk.Button(frame, text="Start crawl", command=run_crawl_from_gui).pack(pady=6)
+    button_row = ttk.Frame(frame)
+    button_row.pack(pady=6)
+    ttk.Button(button_row, text="Start crawl", command=run_crawl_from_gui).pack(side=tk.LEFT, padx=4)
+    ttk.Button(
+        button_row,
+        text="Look again",
+        command=lambda: run_crawl_from_gui(use_cached=True),
+    ).pack(side=tk.LEFT, padx=4)
 
     def on_close() -> None:
         root.destroy()
