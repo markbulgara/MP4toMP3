@@ -400,6 +400,32 @@ def find_keyword_matches(text: str, candidates: Iterable[str]) -> List[str]:
     return sorted(set(matches))
 
 
+def build_metadata_text(meta: Dict[str, Any], keywords: List[str], json_ld: List[Dict[str, Any]]) -> str:
+    parts: List[str] = []
+    for key in (
+        "title",
+        "description",
+        "keywords",
+        "news_keywords",
+        "og:title",
+        "og:description",
+        "twitter:title",
+        "twitter:description",
+    ):
+        value = meta.get(key)
+        if value:
+            parts.append(str(value))
+    parts.extend(keywords)
+    for obj in json_ld:
+        for key in ("name", "description", "keywords"):
+            value = obj.get(key)
+            if isinstance(value, list):
+                parts.extend([str(item) for item in value])
+            elif value:
+                parts.append(str(value))
+    return " ".join(parts)
+
+
 def quick_keyword_matches(html: str, candidates: Iterable[str]) -> List[str]:
     if not candidates:
         return []
@@ -600,6 +626,7 @@ def build_page_result(
     status_code: Optional[int],
     content_type: Optional[str],
     keyword_targets: List[str],
+    metadata_only: bool,
 ) -> PageResult:
     soup = BeautifulSoup(html, "lxml")
     meta = extract_meta(soup)
@@ -623,11 +650,17 @@ def build_page_result(
             keywords.extend([str(k).strip() for k in kw if str(k).strip()])
 
     tags = find_tags(soup)
-    text_content = extract_text_content(soup)
-    keyword_matches = find_keyword_matches(
-        " ".join([text_content, " ".join(tags), " ".join(keywords)]),
-        keyword_targets,
-    )
+    if metadata_only:
+        keyword_matches = find_keyword_matches(
+            build_metadata_text(meta, keywords, json_ld),
+            keyword_targets,
+        )
+    else:
+        text_content = extract_text_content(soup)
+        keyword_matches = find_keyword_matches(
+            " ".join([text_content, " ".join(tags), " ".join(keywords)]),
+            keyword_targets,
+        )
 
     video_items: List[VideoItem] = []
     for obj in json_ld:
@@ -1052,6 +1085,7 @@ async def process_page(
     cache: Dict[str, Any],
     skip_known_misses: bool,
     skip_known_hits: bool,
+    metadata_only: bool,
 ) -> Optional[PageResult]:
     if should_skip_url(url, cache, keyword_targets, skip_known_misses, skip_known_hits):
         return None
@@ -1089,7 +1123,13 @@ async def process_page(
                 fetch_mode = "playwright"
 
     result = build_page_result(
-        url, html, fetch_mode, fetch.status_code, fetch.content_type, keyword_targets
+        url,
+        html,
+        fetch_mode,
+        fetch.status_code,
+        fetch.content_type,
+        keyword_targets,
+        metadata_only,
     )
     result.video_items = dedupe_video_items(result.video_items)
     return result
@@ -1191,6 +1231,7 @@ async def run_crawl(args: argparse.Namespace) -> int:
                 cache,
                 args.skip_known_misses,
                 args.skip_known_hits,
+                args.metadata_only,
             )
             if res:
                 fetched += 1
@@ -1315,6 +1356,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip pages without keyword matches to speed up crawls",
     )
     parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Match keywords only against metadata (title/meta/og/twitter/json-ld)",
+    )
+    parser.add_argument(
         "--include-keyword-matches",
         action="store_true",
         help="Include pages that match keywords even if no videos are detected",
@@ -1382,16 +1428,22 @@ def build_gui() -> None:
 
     root = tk.Tk()
     root.title("Universal Site Video Grid")
-    root.geometry("900x980")
-    root.minsize(900, 980)
+    root.geometry("980x980")
+    root.minsize(980, 980)
 
     frame = ttk.Frame(root, padding=16)
     frame.pack(fill=tk.BOTH, expand=True)
+    core_frame = ttk.LabelFrame(frame, text="Core settings", padding=12)
+    core_frame.pack(fill=tk.X, pady=6)
+    crawl_frame = ttk.LabelFrame(frame, text="Crawl options", padding=12)
+    crawl_frame.pack(fill=tk.X, pady=6)
+    filter_frame = ttk.LabelFrame(frame, text="Filters & cache", padding=12)
+    filter_frame.pack(fill=tk.X, pady=6)
 
-    def add_row(label: str, var: tk.Variable) -> None:
-        row = ttk.Frame(frame)
+    def add_row(parent: ttk.Frame, label: str, var: tk.Variable) -> None:
+        row = ttk.Frame(parent)
         row.pack(fill=tk.X, pady=4)
-        ttk.Label(row, text=label, width=18).pack(side=tk.LEFT)
+        ttk.Label(row, text=label, width=20).pack(side=tk.LEFT)
         ttk.Entry(row, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     base_var = tk.StringVar()
@@ -1409,6 +1461,7 @@ def build_gui() -> None:
     keywords_var = tk.StringVar()
     include_keyword_var = tk.BooleanVar(value=True)
     keyword_filter_only_var = tk.BooleanVar(value=False)
+    metadata_only_var = tk.BooleanVar(value=False)
     use_cache_var = tk.BooleanVar(value=True)
     use_cached_urls_var = tk.BooleanVar(value=False)
     skip_known_misses_var = tk.BooleanVar(value=True)
@@ -1417,29 +1470,26 @@ def build_gui() -> None:
     keep_outputs_var = tk.BooleanVar(value=True)
     refresh_urls_var = tk.BooleanVar(value=False)
 
-    ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
-        anchor=tk.W, pady=(0, 8)
-    )
-    add_row("Base URL", base_var)
-    add_row("Output HTML", out_var)
-    add_row("Max pages", max_pages_var)
-    add_row("Concurrency", concurrency_var)
-    add_row("Delay (s)", delay_var)
-    add_row("Max depth", max_depth_var)
-    add_row("Max URL length", max_url_length_var)
-    add_row("Sample URL (length)", sample_url_length_var)
-    add_row("Timeout (s)", timeout_var)
-    add_row("User-Agent", user_agent_var)
-    add_row("Keywords", keywords_var)
-    add_row("Cache file", cache_file_var)
+    add_row(core_frame, "Base URL", base_var)
+    add_row(core_frame, "Output HTML", out_var)
+    add_row(core_frame, "Keywords", keywords_var)
+    add_row(core_frame, "Sample URL (length)", sample_url_length_var)
+    add_row(core_frame, "Cache file", cache_file_var)
+    add_row(crawl_frame, "Max pages", max_pages_var)
+    add_row(crawl_frame, "Concurrency", concurrency_var)
+    add_row(crawl_frame, "Delay (s)", delay_var)
+    add_row(crawl_frame, "Max depth", max_depth_var)
+    add_row(crawl_frame, "Max URL length", max_url_length_var)
+    add_row(crawl_frame, "Timeout (s)", timeout_var)
+    add_row(crawl_frame, "User-Agent", user_agent_var)
 
-    subdomain_row = ttk.Frame(frame)
+    subdomain_row = ttk.Frame(filter_frame)
     subdomain_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         subdomain_row, text="Include subdomains", variable=include_subdomains_var
     ).pack(side=tk.LEFT)
 
-    keyword_row = ttk.Frame(frame)
+    keyword_row = ttk.Frame(filter_frame)
     keyword_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         keyword_row,
@@ -1447,7 +1497,7 @@ def build_gui() -> None:
         variable=include_keyword_var,
     ).pack(side=tk.LEFT)
 
-    filter_row = ttk.Frame(frame)
+    filter_row = ttk.Frame(filter_frame)
     filter_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         filter_row,
@@ -1455,11 +1505,11 @@ def build_gui() -> None:
         variable=keyword_filter_only_var,
     ).pack(side=tk.LEFT)
 
-    cache_row = ttk.Frame(frame)
+    cache_row = ttk.Frame(filter_frame)
     cache_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(cache_row, text="Enable cache", variable=use_cache_var).pack(side=tk.LEFT)
 
-    outputs_row = ttk.Frame(frame)
+    outputs_row = ttk.Frame(filter_frame)
     outputs_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         outputs_row,
@@ -1467,7 +1517,7 @@ def build_gui() -> None:
         variable=keep_outputs_var,
     ).pack(side=tk.LEFT)
 
-    cached_urls_row = ttk.Frame(frame)
+    cached_urls_row = ttk.Frame(filter_frame)
     cached_urls_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         cached_urls_row,
@@ -1475,7 +1525,7 @@ def build_gui() -> None:
         variable=use_cached_urls_var,
     ).pack(side=tk.LEFT)
 
-    refresh_row = ttk.Frame(frame)
+    refresh_row = ttk.Frame(filter_frame)
     refresh_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         refresh_row,
@@ -1483,7 +1533,7 @@ def build_gui() -> None:
         variable=refresh_urls_var,
     ).pack(side=tk.LEFT)
 
-    skip_row = ttk.Frame(frame)
+    skip_row = ttk.Frame(filter_frame)
     skip_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         skip_row,
@@ -1491,7 +1541,14 @@ def build_gui() -> None:
         variable=skip_known_misses_var,
     ).pack(side=tk.LEFT)
 
-    hit_row = ttk.Frame(frame)
+    hit_row = ttk.Frame(filter_frame)
+    metadata_row = ttk.Frame(filter_frame)
+    metadata_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        metadata_row,
+        text="Metadata-only keyword matching",
+        variable=metadata_only_var,
+    ).pack(side=tk.LEFT)
     hit_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(
         hit_row,
@@ -1499,7 +1556,7 @@ def build_gui() -> None:
         variable=skip_known_hits_var,
     ).pack(side=tk.LEFT)
 
-    mode_row = ttk.Frame(frame)
+    mode_row = ttk.Frame(crawl_frame)
     mode_row.pack(fill=tk.X, pady=4)
     ttk.Label(mode_row, text="Playwright", width=18).pack(side=tk.LEFT)
     ttk.Combobox(
@@ -1510,7 +1567,7 @@ def build_gui() -> None:
         width=12,
     ).pack(side=tk.LEFT)
 
-    log_box = scrolledtext.ScrolledText(frame, height=16, state="disabled")
+    log_box = scrolledtext.ScrolledText(frame, height=14, state="disabled")
     log_box.pack(fill=tk.BOTH, expand=True, pady=(12, 8))
 
     def log_line(message: str) -> None:
@@ -1539,6 +1596,7 @@ def build_gui() -> None:
         args.keywords = [item.strip() for item in keywords_var.get().split(",") if item.strip()]
         args.include_keyword_matches = include_keyword_var.get() or bool(args.keywords)
         args.keyword_filter_only = keyword_filter_only_var.get()
+        args.metadata_only = metadata_only_var.get()
         args.use_cache = use_cache_var.get()
         args.use_cached_urls = use_cached_urls_var.get() or use_cached
         args.skip_known_misses = skip_known_misses_var.get() or use_cached

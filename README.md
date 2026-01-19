@@ -63,6 +63,7 @@ The batch launcher opens a console window so you can watch crawl progress logs.
 - `--keywords "pricing,private beta"` (comma-separated keyword matches)
 - `--include-keyword-matches` (include pages with keyword matches even without videos)
 - `--keyword-filter-only` (skip pages without keyword matches for faster crawls)
+- `--metadata-only` (only match keywords against metadata fields)
 - `--cache-file crawl_cache.json` (cache file for keyword hits/misses)
 - `--use-cache` (enable cache for skipping known misses and reusing URL lists)
 - `--use-cached-urls` (reuse cached URL list for a domain to “look again” quickly)
@@ -88,6 +89,9 @@ python universal_site_video_grid.py --base https://example.com --keywords "priva
 
 # Speed up by only keeping keyword matches
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --keyword-filter-only
+
+# Match keywords only in metadata fields
+python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --metadata-only
 
 # Re-scan a domain using cached URLs while skipping known misses
 python universal_site_video_grid.py --base https://example.com --keywords "private beta,pricing" --use-cache --use-cached-urls --skip-known-misses
