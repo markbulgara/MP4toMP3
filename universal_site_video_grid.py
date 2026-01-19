@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -704,7 +705,12 @@ def page_needs_playwright(html: str, meta: Dict[str, Any]) -> bool:
     return False
 
 
-def render_html_report(results: List[PageResult], stats: Dict[str, Any], output_path: str) -> None:
+def render_html_report(
+    results: List[PageResult],
+    stats: Dict[str, Any],
+    output_path: str,
+    json_filename: str,
+) -> None:
     cards = []
     placeholder = (
         "data:image/svg+xml;utf8,"
@@ -779,7 +785,7 @@ header p {{ margin: 4px 0; }}
   <p>Rendered with Playwright: {stats.get('playwright')}</p>
   <p>Pages with videos: {stats.get('with_videos')}</p>
   <p>Keyword matches: {stats.get('keyword_matches')}</p>
-  <p><a href="report.json" style="color:#93c5fd;">Download JSON</a></p>
+  <p><a href="{escape(json_filename)}" style="color:#93c5fd;">Download JSON</a></p>
   <div class=\"search\">
     <input id=\"search\" type=\"text\" placeholder=\"Search by title, URL, keywords...\">
   </div>
@@ -1203,7 +1209,13 @@ async def run_crawl(args: argparse.Namespace) -> int:
         "keyword_matches": len(keyword_matches),
     }
 
+    output_path = args.out
     json_path = args.out.rsplit(".", 1)[0] + ".json"
+    if args.keep_outputs and (os.path.exists(output_path) or os.path.exists(json_path)):
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        base_name, ext = os.path.splitext(args.out)
+        output_path = f"{base_name}-{timestamp}{ext or '.html'}"
+        json_path = f"{base_name}-{timestamp}.json"
     json_data = [
         {
             "page_url": result.page_url,
@@ -1225,9 +1237,9 @@ async def run_crawl(args: argparse.Namespace) -> int:
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump({"stats": stats, "results": json_data}, handle, indent=2)
 
-    render_html_report(with_videos, stats, args.out)
+    render_html_report(with_videos, stats, output_path, os.path.basename(json_path))
 
-    logging.info("Report written to %s and %s", args.out, json_path)
+    logging.info("Report written to %s and %s", output_path, json_path)
     return 0
 
 
@@ -1289,6 +1301,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Skip URLs that already matched keywords (faster incremental runs)",
     )
     parser.add_argument(
+        "--keep-outputs",
+        action="store_true",
+        help="Keep prior reports by timestamping new outputs instead of overwriting",
+    )
+    parser.add_argument(
         "--gui",
         action="store_true",
         help="Launch a simple interactive GUI for entering crawl options",
@@ -1303,6 +1320,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.skip_known_hits = True
     if args.use_cached_urls and not args.use_cache:
         args.use_cache = True
+    if not args.keep_outputs:
+        args.keep_outputs = True
     return args
 
 
@@ -1343,6 +1362,7 @@ def build_gui() -> None:
     skip_known_misses_var = tk.BooleanVar(value=True)
     skip_known_hits_var = tk.BooleanVar(value=True)
     cache_file_var = tk.StringVar(value="crawl_cache.json")
+    keep_outputs_var = tk.BooleanVar(value=True)
 
     ttk.Label(frame, text="Site Search & Crawl Options", font=("Arial", 14, "bold")).pack(
         anchor=tk.W, pady=(0, 8)
@@ -1383,6 +1403,14 @@ def build_gui() -> None:
     cache_row = ttk.Frame(frame)
     cache_row.pack(fill=tk.X, pady=4)
     ttk.Checkbutton(cache_row, text="Enable cache", variable=use_cache_var).pack(side=tk.LEFT)
+
+    outputs_row = ttk.Frame(frame)
+    outputs_row.pack(fill=tk.X, pady=4)
+    ttk.Checkbutton(
+        outputs_row,
+        text="Keep prior reports (timestamp new outputs)",
+        variable=keep_outputs_var,
+    ).pack(side=tk.LEFT)
 
     cached_urls_row = ttk.Frame(frame)
     cached_urls_row.pack(fill=tk.X, pady=4)
@@ -1451,6 +1479,7 @@ def build_gui() -> None:
         args.skip_known_misses = skip_known_misses_var.get() or use_cached
         args.skip_known_hits = skip_known_hits_var.get() or use_cached
         args.cache_file = cache_file_var.get().strip() or "crawl_cache.json"
+        args.keep_outputs = keep_outputs_var.get()
 
         log_line(f"Starting crawl for {args.base}")
 
