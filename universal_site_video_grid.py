@@ -664,52 +664,53 @@ def build_page_result(
         )
 
     video_items: List[VideoItem] = []
-    for obj in json_ld:
-        if obj.get("@type") == "VideoObject":
-            video_url = obj.get("contentUrl") or obj.get("embedUrl") or url
-            embed_url = obj.get("embedUrl")
-            thumb = obj.get("thumbnailUrl")
-            if isinstance(thumb, list):
-                thumb = thumb[0] if thumb else None
+    if not metadata_only:
+        for obj in json_ld:
+            if obj.get("@type") == "VideoObject":
+                video_url = obj.get("contentUrl") or obj.get("embedUrl") or url
+                embed_url = obj.get("embedUrl")
+                thumb = obj.get("thumbnailUrl")
+                if isinstance(thumb, list):
+                    thumb = thumb[0] if thumb else None
+                video_items.append(
+                    VideoItem(
+                        provider="schema",
+                        video_url=resolve_url(url, video_url) or video_url,
+                        embed_url=resolve_url(url, embed_url) if embed_url else None,
+                        thumbnail_url=resolve_url(url, thumb) if thumb else None,
+                        title=obj.get("name"),
+                        source="schema",
+                    )
+                )
+
+        og_video = meta.get("og:video") or meta.get("og:video:url") or meta.get("og:video:secure_url")
+        if og_video:
             video_items.append(
                 VideoItem(
-                    provider="schema",
-                    video_url=resolve_url(url, video_url) or video_url,
-                    embed_url=resolve_url(url, embed_url) if embed_url else None,
-                    thumbnail_url=resolve_url(url, thumb) if thumb else None,
-                    title=obj.get("name"),
-                    source="schema",
+                    provider="og",
+                    video_url=resolve_url(url, og_video) or og_video,
+                    embed_url=resolve_url(url, og_video) or og_video,
+                    thumbnail_url=resolve_url(url, meta.get("og:image")) if meta.get("og:image") else None,
+                    title=meta.get("og:title"),
+                    source="og",
+                )
+            )
+        twitter_player = meta.get("twitter:player")
+        if twitter_player:
+            video_items.append(
+                VideoItem(
+                    provider="twitter",
+                    video_url=resolve_url(url, twitter_player) or twitter_player,
+                    embed_url=resolve_url(url, twitter_player) or twitter_player,
+                    thumbnail_url=resolve_url(url, meta.get("twitter:image")) if meta.get("twitter:image") else None,
+                    title=meta.get("twitter:title"),
+                    source="twitter",
                 )
             )
 
-    og_video = meta.get("og:video") or meta.get("og:video:url") or meta.get("og:video:secure_url")
-    if og_video:
-        video_items.append(
-            VideoItem(
-                provider="og",
-                video_url=resolve_url(url, og_video) or og_video,
-                embed_url=resolve_url(url, og_video) or og_video,
-                thumbnail_url=resolve_url(url, meta.get("og:image")) if meta.get("og:image") else None,
-                title=meta.get("og:title"),
-                source="og",
-            )
-        )
-    twitter_player = meta.get("twitter:player")
-    if twitter_player:
-        video_items.append(
-            VideoItem(
-                provider="twitter",
-                video_url=resolve_url(url, twitter_player) or twitter_player,
-                embed_url=resolve_url(url, twitter_player) or twitter_player,
-                thumbnail_url=resolve_url(url, meta.get("twitter:image")) if meta.get("twitter:image") else None,
-                title=meta.get("twitter:title"),
-                source="twitter",
-            )
-        )
-
-    video_items.extend(extract_videos_from_html(soup, url))
-    if not video_items:
-        video_items.extend(extract_video_links(soup, url))
+        video_items.extend(extract_videos_from_html(soup, url))
+        if not video_items:
+            video_items.extend(extract_video_links(soup, url))
 
     thumb, badges = choose_thumbnail(video_items, meta, json_ld, url)
 
@@ -1111,6 +1112,8 @@ async def process_page(
             finally:
                 await page.close()
 
+    if metadata_only and use_playwright == "auto":
+        use_playwright = "never"
     if use_playwright == "always":
         rendered = await maybe_render()
         if rendered:
@@ -1372,6 +1375,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--metadata-only",
         action="store_true",
+        default=True,
         help="Match keywords only against metadata (title/meta/og/twitter/json-ld)",
     )
     parser.add_argument(
@@ -1475,7 +1479,7 @@ def build_gui() -> None:
     keywords_var = tk.StringVar()
     include_keyword_var = tk.BooleanVar(value=True)
     keyword_filter_only_var = tk.BooleanVar(value=False)
-    metadata_only_var = tk.BooleanVar(value=False)
+    metadata_only_var = tk.BooleanVar(value=True)
     use_cache_var = tk.BooleanVar(value=True)
     use_cached_urls_var = tk.BooleanVar(value=False)
     skip_known_misses_var = tk.BooleanVar(value=True)

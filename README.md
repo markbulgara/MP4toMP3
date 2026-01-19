@@ -63,7 +63,7 @@ The batch launcher opens a console window so you can watch crawl progress logs.
 - `--keywords "pricing,private beta"` (comma-separated keyword matches)
 - `--include-keyword-matches` (include pages with keyword matches even without videos)
 - `--keyword-filter-only` (skip pages without keyword matches for faster crawls)
-- `--metadata-only` (only match keywords against metadata fields)
+- `--metadata-only` (only match keywords against metadata fields; default on)
 - `--cache-file crawl_cache.json` (cache file for keyword hits/misses)
 - `--use-cache` (enable cache for skipping known misses and reusing URL lists)
 - `--use-cached-urls` (reuse cached URL list for a domain to “look again” quickly)
