@@ -29,6 +29,8 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 .\bin\katana-indexer.exe serve --addr :8080
 ```
 
+Prefer double-click? Run `run_gui.bat` to build (if needed) and launch the GUI automatically.
+
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
 ## First-time setup (step-by-step)
