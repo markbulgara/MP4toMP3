@@ -1,10 +1,13 @@
 import json
+import platform
 import shutil
 import sys
 import time
-import platform
 from pathlib import Path
 from typing import Dict, List, Optional
+
+if __package__ is None:
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from PySide6.QtCore import QStandardPaths, QThread, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
@@ -30,9 +33,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import CrawlConfig, load_config, save_config
-from .katana_runner import KatanaRunner
-from .utils import asset_type_from_url, normalize_url
+from app.config import CrawlConfig, load_config, save_config
+from app.katana_runner import KatanaRunner
+from app.utils import asset_type_from_url, normalize_url
 
 
 class CrawlThread(QThread):
