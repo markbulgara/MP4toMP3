@@ -258,6 +258,8 @@ class KatanaRunner(QObject):
         )
         stdout_thread.start()
         stderr_thread.start()
+        last_output_time = time.time()
+        last_heartbeat = last_output_time
         try:
             while True:
                 if self._start_time and self.config.max_runtime > 0:
@@ -272,6 +274,11 @@ class KatanaRunner(QObject):
                 if self._stop_requested:
                     self._terminate_process(process)
                     break
+                now = time.time()
+                if now - last_heartbeat >= 15:
+                    self.signals.log.emit("Katana still running...")
+                    print("Katana still running...")
+                    last_heartbeat = now
                 try:
                     source, line = output_queue.get(timeout=0.1)
                 except queue.Empty:
@@ -280,6 +287,7 @@ class KatanaRunner(QObject):
                     continue
                 if not line:
                     continue
+                last_output_time = time.time()
                 cleaned = line.strip()
                 if source == "stderr":
                     log_handle.write(line)
