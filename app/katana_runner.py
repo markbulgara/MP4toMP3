@@ -433,7 +433,10 @@ class KatanaRunner(QObject):
             args.extend([concurrency_flag, str(self.config.concurrency)])
         delay_flag = self._pick_flag(help_text, ["-delay", "-rl"])
         if delay_flag:
-            args.extend([delay_flag, str(self.config.delay)])
+            delay_value = self.config.delay
+            if delay_flag == "-delay":
+                delay_value = int(round(self.config.delay * 1000))
+            args.extend([delay_flag, str(delay_value)])
         timeout_flag = self._pick_flag(help_text, ["-timeout", "-t"])
         if timeout_flag:
             args.extend([timeout_flag, str(self.config.timeout)])
