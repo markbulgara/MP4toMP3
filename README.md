@@ -111,7 +111,7 @@ If you see **“crawl failed: no such module: fts5”**, rebuild with the SQLite
 
 ```powershell
 $env:CGO_ENABLED=1
-$env:GOFLAGS="-tags sqlite_fts5"
+$env:GOFLAGS="-tags=sqlite_fts5"
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 ```
 
