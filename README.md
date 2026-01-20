@@ -29,7 +29,7 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 .\bin\katana-indexer.exe serve --addr :8080
 ```
 
-Prefer double-click? Run `run_gui.bat` to build (with CGO enabled), launch the GUI, and keep logs visible in the same window.
+Prefer double-click? Run `run_gui.bat` to build (with CGO + FTS5 enabled), launch the GUI, and keep logs visible in the same window.
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
@@ -104,6 +104,16 @@ If the GUI shows: **“Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requ
    ```
 
 If you are building in an environment that cannot use CGO, you will need a different SQLite driver that does not require CGO.
+
+### FTS5 error (no such module: fts5)
+
+If you see **“crawl failed: no such module: fts5”**, rebuild with the SQLite FTS5 tag enabled:
+
+```powershell
+$env:CGO_ENABLED=1
+$env:GOFLAGS="-tags sqlite_fts5"
+go build -o bin\katana-indexer.exe .\cmd\katana-indexer
+```
 
 ## Flags
 

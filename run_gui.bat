@@ -8,6 +8,7 @@ if not exist "%EXE_PATH%" (
   echo Building %EXE_PATH%...
   if not exist "%BIN_DIR%" mkdir "%BIN_DIR%"
   set "CGO_ENABLED=1"
+  set "GOFLAGS=-tags sqlite_fts5"
   go build -o "%EXE_PATH%" .\cmd\katana-indexer
   if errorlevel 1 (
     echo Build failed. Please ensure Go is installed and on your PATH.
