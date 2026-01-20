@@ -13,6 +13,7 @@ A minimal wrapper around [Katana](https://github.com/projectdiscovery/katana) th
 ```powershell
 $env:CGO_ENABLED=1
 $env:GOFLAGS="-tags=sqlite_fts5"
+go mod tidy
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 ```
 
