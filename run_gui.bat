@@ -22,6 +22,7 @@ echo Starting GUI on http://localhost:8080 ...
 echo Open this URL in your browser: http://localhost:8080
 echo Logs will appear in this window while the server is running.
 start "" "%EXE_PATH%" serve --addr :8080
+start "" "http://localhost:8080"
 echo Waiting for the GUI process to exit. Close this window when you're done.
 pause
 exit /b 0
