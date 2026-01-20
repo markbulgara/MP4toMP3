@@ -16,6 +16,7 @@ if not exist "%EXE_PATH%" (
 )
 
 echo Starting GUI on http://localhost:8080 ...
+echo Open this URL in your browser: http://localhost:8080
 echo Logs will appear in this window while the server is running.
 "%EXE_PATH%" serve --addr :8080
 echo GUI stopped.
