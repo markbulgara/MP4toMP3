@@ -115,6 +115,16 @@ $env:GOFLAGS="-tags=sqlite_fts5"
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 ```
 
+### Katana not found (exec: "katana")
+
+If you see **`crawl failed: exec: "katana": executable file not found in %PATH%`**, install Katana and ensure it is on your PATH, or provide the full path:
+
+```powershell
+.\bin\katana-indexer.exe crawl --domain https://example.com --katana-path "C:\Tools\katana.exe"
+```
+
+In the GUI, set **Katana path (optional)** to your `katana.exe` location.
+
 ## Flags
 
 ### `crawl`
