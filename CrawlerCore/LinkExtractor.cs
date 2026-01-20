@@ -5,7 +5,7 @@ namespace CrawlerCore;
 public sealed class LinkExtractor
 {
     private static readonly Regex InlineUrlRegex = new(
-        @"(?<url>(https?:)?//[^\s'\"<>\\)]+)",
+        @"(?<url>(https?:)?//[^\s'""<>\\)]+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly string[] Attributes =

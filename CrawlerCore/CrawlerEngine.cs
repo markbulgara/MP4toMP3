@@ -279,7 +279,8 @@ public sealed class CrawlerEngine : IAsyncDisposable
             return true;
         }
 
-        return parse.Url.Contains(\"video\", StringComparison.OrdinalIgnoreCase) ||\n               parse.Url.Contains(\"watch\", StringComparison.OrdinalIgnoreCase);
+        return parse.Url.Contains("video", StringComparison.OrdinalIgnoreCase) ||
+               parse.Url.Contains("watch", StringComparison.OrdinalIgnoreCase);
     }
 }
 
