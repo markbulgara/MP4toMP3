@@ -90,16 +90,14 @@ func runServe(args []string) {
 	addr := fs.String("addr", ":8080", "Address to serve the search UI")
 	fs.Parse(args)
 
-	if *dbPath == "" && *domain == "" {
-		fmt.Println("either -domain or -db is required")
-		fs.Usage()
-		os.Exit(1)
-	}
-
-	resolvedDBPath, err := ensureDBPath(*domain, *dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build database path: %v\n", err)
-		os.Exit(1)
+	resolvedDBPath := ""
+	if *dbPath != "" || *domain != "" {
+		var err error
+		resolvedDBPath, err = ensureDBPath(*domain, *dbPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to build database path: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if err := server.Serve(resolvedDBPath, *addr); err != nil {
@@ -113,7 +111,7 @@ func printUsage() {
 
 Usage:
   katana-indexer crawl --domain https://example.com --serve
-  katana-indexer serve --domain https://example.com --addr :8080
+  katana-indexer serve --addr :8080
 
 Commands:
   crawl   Run katana crawler and collect metadata.

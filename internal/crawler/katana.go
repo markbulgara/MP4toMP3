@@ -24,6 +24,7 @@ type Options struct {
 	Timeout        time.Duration
 	UserAgent      string
 	MaxConnections int
+	Reporter       Reporter
 }
 
 type KatanaEvent struct {
@@ -32,6 +33,12 @@ type KatanaEvent struct {
 	Attribute string `json:"attribute"`
 	Source    string `json:"source"`
 	Depth     int    `json:"depth"`
+}
+
+type Reporter interface {
+	OnKatanaEvent(event KatanaEvent)
+	OnMetadataFetched(url string, result metadata.Result, err error)
+	OnLog(line string)
 }
 
 func Run(ctx context.Context, opts Options) error {
@@ -92,6 +99,9 @@ func Run(ctx context.Context, opts Options) error {
 				cancel()
 				if err != nil {
 					_ = db.MarkFetched(dbConn, url, time.Now().UTC())
+					if opts.Reporter != nil {
+						opts.Reporter.OnMetadataFetched(url, result, err)
+					}
 					continue
 				}
 
@@ -109,6 +119,9 @@ func Run(ctx context.Context, opts Options) error {
 				entry.LastSeen = fetchedAt
 				entry.FetchedAt = &fetchedAt
 				_ = db.UpsertURL(dbConn, entry)
+				if opts.Reporter != nil {
+					opts.Reporter.OnMetadataFetched(url, result, nil)
+				}
 			}
 		}()
 	}
@@ -116,7 +129,9 @@ func Run(ctx context.Context, opts Options) error {
 	stderrScanner := bufio.NewScanner(stderr)
 	go func() {
 		for stderrScanner.Scan() {
-			// Katana writes progress to stderr. Ignore or log later.
+			if opts.Reporter != nil {
+				opts.Reporter.OnLog(stderrScanner.Text())
+			}
 		}
 	}()
 
@@ -128,6 +143,9 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		var event KatanaEvent
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			if opts.Reporter != nil {
+				opts.Reporter.OnLog(fmt.Sprintf("failed to parse katana output: %v", err))
+			}
 			continue
 		}
 		if event.URL == "" {
@@ -140,6 +158,10 @@ func Run(ctx context.Context, opts Options) error {
 		entry.Depth = event.Depth
 		entry.LastSeen = time.Now().UTC()
 		_ = db.UpsertURL(dbConn, entry)
+
+		if opts.Reporter != nil {
+			opts.Reporter.OnKatanaEvent(event)
+		}
 
 		needs, err := db.NeedsMetadata(dbConn, event.URL)
 		if err != nil {

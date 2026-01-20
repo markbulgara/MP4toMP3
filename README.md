@@ -14,6 +14,10 @@ Katana Indexer wraps the [ProjectDiscovery Katana](https://github.com/projectdis
 New-Item -ItemType Directory -Force -Path bin | Out-Null
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 
+# Launch the all-in-one GUI (configure crawl, logs, progress, search)
+.\bin\katana-indexer.exe serve --addr :8080
+
+# Or crawl directly from the CLI
 # Crawl a domain (non-headless by default)
 .\bin\katana-indexer.exe crawl --domain https://example.com --fetch-workers 128 --max-connections 512
 
@@ -21,7 +25,7 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 .\bin\katana-indexer.exe crawl --domain https://example.com --serve --serve-addr :8080
 
 # Launch search UI
-.\bin\katana-indexer.exe serve --domain https://example.com --addr :8080
+.\bin\katana-indexer.exe serve --addr :8080
 ```
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
@@ -45,13 +49,14 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
    This auto-creates a local database at `./katana-index/example.com/index.db` (based on the domain).
 5. **Start the search UI**:
    ```powershell
-   .\bin\katana-indexer.exe serve --domain https://example.com --addr :8080
+   .\bin\katana-indexer.exe serve --addr :8080
    ```
 6. **Search your index**: open `http://localhost:8080` and search for keywords, tags, or descriptions.
 7. **Want the UI immediately?** Run crawl with `--serve`:
    ```powershell
    .\bin\katana-indexer.exe crawl --domain https://example.com --serve --serve-addr :8080
    ```
+8. **GUI-only flow**: run `serve`, then use the UI to start/stop crawls, watch logs, and load saved indexes.
 
 > **Note (Windows)**: Katana runs non-headless and may prompt you to choose a browser the first time. Pick Chrome or Edge and set it as the default so the crawl continues without asking again.
 
@@ -102,3 +107,13 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 - `--db`: SQLite database path (auto-generated when empty).
 - `--domain`: Domain or URL that was crawled (used to locate the database).
 - `--addr`: Address to serve the UI.
+
+## GUI features
+
+The GUI provides:
+
+- Domain, database path, and crawl settings input fields (including Katana args/path and User-Agent).
+- Real-time logs and status counters.
+- A progress bar based on indexed vs. metadata-fetched URLs.
+- A **Stop & save** button to terminate early while keeping the current index.
+- Load any previously saved database path to search past crawls.
