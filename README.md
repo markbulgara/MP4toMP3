@@ -15,6 +15,7 @@ New-Item -ItemType Directory -Force -Path bin | Out-Null
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 
 # Launch the all-in-one GUI (configure crawl, logs, progress, search)
+# Then open http://localhost:8080 in your browser.
 .\bin\katana-indexer.exe serve --addr :8080
 
 # Or crawl directly from the CLI
@@ -47,11 +48,11 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
    .\bin\katana-indexer.exe crawl --domain https://example.com
    ```
    This auto-creates a local database at `./katana-index/example.com/index.db` (based on the domain).
-5. **Start the search UI**:
+5. **Start the search UI (GUI)**:
    ```powershell
    .\bin\katana-indexer.exe serve --addr :8080
    ```
-6. **Search your index**: open `http://localhost:8080` and search for keywords, tags, or descriptions.
+6. **Open the GUI**: go to `http://localhost:8080` and search for keywords, tags, or descriptions.
 7. **Want the UI immediately?** Run crawl with `--serve`:
    ```powershell
    .\bin\katana-indexer.exe crawl --domain https://example.com --serve --serve-addr :8080
