@@ -26,12 +26,14 @@ public sealed class LinkExtractor
         FetchResult fetch,
         UrlNormalizer normalizer,
         CrawlSettings settings,
-        Uri baseUri)
+        Uri baseUri,
+        bool extractMetaTags)
     {
         var body = fetch.Body ?? Array.Empty<byte>();
         var content = System.Text.Encoding.UTF8.GetString(body);
         var links = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var assets = new List<AssetRecord>();
+        var metaTags = extractMetaTags ? ExtractMetaTags(content) : Array.Empty<MetaTagRecord>();
 
         foreach (var attr in Attributes)
         {
@@ -78,6 +80,7 @@ public sealed class LinkExtractor
             title,
             normalizedLinks,
             assets,
+            metaTags,
             fetch.Referrer);
     }
 

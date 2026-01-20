@@ -14,7 +14,7 @@ public class LinkExtractorTests
         var normalizer = new UrlNormalizer();
         var settings = new CrawlSettings();
 
-        var result = extractor.ParseHtml(fetch, normalizer, settings, new Uri("https://example.com"));
+        var result = extractor.ParseHtml(fetch, normalizer, settings, new Uri("https://example.com"), true);
 
         Assert.Contains("https://example.com/video.mp4", result.DiscoveredLinks);
         Assert.Contains(result.Assets, asset => asset.AssetUrl.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase));

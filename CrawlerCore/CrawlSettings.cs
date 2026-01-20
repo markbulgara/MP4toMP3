@@ -84,6 +84,7 @@ public sealed record ParseResult(
     string? Title,
     IReadOnlyList<string> DiscoveredLinks,
     IReadOnlyList<AssetRecord> Assets,
+    IReadOnlyList<MetaTagRecord> MetaTags,
     string Referrer);
 
 public sealed record PageRecord(

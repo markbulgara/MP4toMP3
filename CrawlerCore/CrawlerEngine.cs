@@ -15,7 +15,6 @@ public sealed class CrawlerEngine : IAsyncDisposable
     private readonly Channel<UrlToFetch> _frontier;
     private readonly Channel<FetchResult> _fetchChannel;
     private readonly Channel<ParseResult> _parseChannel;
-    private readonly Channel<(ulong UrlHash, string Html, string Url)> _enrichmentChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly HttpClient _client;
     private readonly RobotsCache _robots;
@@ -41,7 +40,6 @@ public sealed class CrawlerEngine : IAsyncDisposable
         _frontier = Channel.CreateBounded<UrlToFetch>(settings.FrontierCapacity);
         _fetchChannel = Channel.CreateBounded<FetchResult>(settings.FetchCapacity);
         _parseChannel = Channel.CreateBounded<ParseResult>(settings.ParseCapacity);
-        _enrichmentChannel = Channel.CreateBounded<(ulong UrlHash, string Html, string Url)>(settings.ParseCapacity);
         _globalLock = new SemaphoreSlim(settings.GlobalConcurrency, settings.GlobalConcurrency);
 
         var handler = new SocketsHttpHandler
@@ -77,10 +75,9 @@ public sealed class CrawlerEngine : IAsyncDisposable
         var fetchers = Enumerable.Range(0, _settings.GlobalConcurrency).Select(_ => Task.Run(() => FetchLoopAsync(baseUri, linkedCts.Token)));
         var parsers = Enumerable.Range(0, Math.Max(1, _settings.GlobalConcurrency / 2)).Select(_ => Task.Run(() => ParseLoopAsync(baseUri, linkedCts.Token)));
         var dbWriter = Task.Run(() => DbLoopAsync(linkedCts.Token));
-        var enrichmentTasks = Enumerable.Range(0, _settings.EnrichmentConcurrency).Select(_ => Task.Run(() => EnrichmentLoopAsync(linkedCts.Token)));
         var statsTask = Task.Run(() => StatsLoopAsync(linkedCts.Token));
 
-        await Task.WhenAll(fetchers.Concat(parsers).Concat(enrichmentTasks).Append(dbWriter).Append(statsTask));
+        await Task.WhenAll(fetchers.Concat(parsers).Append(dbWriter).Append(statsTask));
         return run;
     }
 
@@ -167,27 +164,10 @@ public sealed class CrawlerEngine : IAsyncDisposable
             }
 
             var parse = result.ContentType.Contains("text/html", StringComparison.OrdinalIgnoreCase)
-                ? _extractor.ParseHtml(result, _normalizer, _settings, baseUri)
-                : new ParseResult(result.Url, result.FinalUrl, result.StatusCode, result.ContentType, null, Array.Empty<string>(), Array.Empty<AssetRecord>(), result.Referrer);
+                ? _extractor.ParseHtml(result, _normalizer, _settings, baseUri, _settings.EnableEnrichment)
+                : new ParseResult(result.Url, result.FinalUrl, result.StatusCode, result.ContentType, null, Array.Empty<string>(), Array.Empty<AssetRecord>(), Array.Empty<MetaTagRecord>(), result.Referrer);
 
             await _parseChannel.Writer.WriteAsync(parse, cancellationToken);
-
-            if (_settings.EnableEnrichment && result.Body is not null)
-            {
-                var html = System.Text.Encoding.UTF8.GetString(result.Body);
-                var urlHash = Hashing.XxHash64(parse.Url);
-                await _enrichmentChannel.Writer.WriteAsync((urlHash, html, parse.Url), cancellationToken);
-            }
-        }
-    }
-
-    private async Task EnrichmentLoopAsync(CancellationToken cancellationToken)
-    {
-        await foreach (var item in _enrichmentChannel.Reader.ReadAllAsync(cancellationToken))
-        {
-            var metadata = _extractor.ExtractEnriched(item.Html, item.UrlHash, item.Url);
-            _store.BufferMetadata(metadata);
-            await _store.FlushMetadataAsync(_settings.PageBatchSize);
         }
     }
 
@@ -211,10 +191,14 @@ public sealed class CrawlerEngine : IAsyncDisposable
                 await EnqueueUrlAsync(new UrlToFetch(link, parse.Url), cancellationToken);
             }
 
+            var metadata = new EnrichedMetadata(urlHash, parse.Url, parse.Title, parse.MetaTags);
+            _store.BufferMetadata(metadata);
+
             Interlocked.Increment(ref _parsed);
 
             await _store.FlushPagesAsync(_settings.PageBatchSize);
             await _store.FlushAssetsAsync(_settings.AssetBatchSize);
+            await _store.FlushMetadataAsync(_settings.PageBatchSize);
         }
     }
 
