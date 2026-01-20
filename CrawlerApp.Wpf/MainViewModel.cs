@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace CrawlerApp.Wpf;
 
@@ -24,11 +25,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _sameHostOnly = true;
     private bool _highThroughput;
     private bool _enableEnrichment = true;
-    private int _maxSearchResults = 5000;
     private CancellationTokenSource? _cts;
     private CrawlerEngine? _engine;
     private SqliteCrawlStore? _store;
     private string? _dbPath;
+    private readonly DispatcherTimer _searchRefreshTimer;
+    private readonly SemaphoreSlim _pagesSearchGate = new(1, 1);
+    private readonly SemaphoreSlim _assetsSearchGate = new(1, 1);
+    private readonly SemaphoreSlim _metadataSearchGate = new(1, 1);
 
     public ObservableCollection<PageRecord> Pages { get; } = new();
     public ObservableCollection<AssetRecord> Assets { get; } = new();
@@ -91,12 +95,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool SameHostOnly { get => _sameHostOnly; set => SetField(ref _sameHostOnly, value); }
     public bool HighThroughput { get => _highThroughput; set => SetField(ref _highThroughput, value); }
     public bool EnableEnrichment { get => _enableEnrichment; set => SetField(ref _enableEnrichment, value); }
-    public int MaxSearchResults { get => _maxSearchResults; set => SetField(ref _maxSearchResults, value); }
 
     public MainViewModel()
     {
         StartCommand = new RelayCommand(() => _ = StartAsync(), () => _engine is null);
         StopCommand = new RelayCommand(Stop, () => _engine is not null);
+        _searchRefreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _searchRefreshTimer.Tick += (_, _) => RefreshSearches();
     }
 
     private async Task StartAsync()
@@ -129,6 +137,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _engine.StatsUpdated += UpdateStats;
         _engine.LogWritten += AddLog;
         _cts = new CancellationTokenSource();
+        _searchRefreshTimer.Start();
 
         StartCommand.RaiseCanExecuteChanged();
         StopCommand.RaiseCanExecuteChanged();
@@ -140,6 +149,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _cts?.Cancel();
         _engine = null;
+        _searchRefreshTimer.Stop();
         StartCommand.RaiseCanExecuteChanged();
         StopCommand.RaiseCanExecuteChanged();
     }
@@ -188,38 +198,48 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var pages = new List<PageRecord>();
 
-        await Task.Run(async () =>
+        if (!await _pagesSearchGate.WaitAsync(0))
         {
-            await using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            await connection.OpenAsync();
+            return;
+        }
 
-            static string ReadString(SqliteDataReader reader, int index) =>
-                reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
+        try
+        {
+            await Task.Run(async () =>
+            {
+                await using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                await connection.OpenAsync();
 
-            var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT p.url, p.url_hash, p.status_code, p.content_type, p.title_snippet, p.final_url, p.referrer
+                static string ReadString(SqliteDataReader reader, int index) =>
+                    reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
+
+                var cmd = connection.CreateCommand();
+                cmd.CommandText = @"SELECT p.url, p.url_hash, p.status_code, p.content_type, p.title_snippet, p.final_url, p.referrer
 FROM pages p
 JOIN pages_fts f ON f.rowid = p.url_hash
-WHERE pages_fts MATCH $query
-LIMIT $limit";
-            cmd.Parameters.AddWithValue("$query", query);
-            cmd.Parameters.AddWithValue("$limit", MaxSearchResults);
+WHERE pages_fts MATCH $query";
+                cmd.Parameters.AddWithValue("$query", query);
 
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                pages.Add(new PageRecord(
-                    Guid.Empty,
-                    reader.GetString(0),
-                    (ulong)reader.GetInt64(1),
-                    reader.GetInt32(2),
-                    ReadString(reader, 3),
-                    ReadString(reader, 4),
-                    ReadString(reader, 5),
-                    ReadString(reader, 6)));
-            }
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    pages.Add(new PageRecord(
+                        Guid.Empty,
+                        reader.GetString(0),
+                        (ulong)reader.GetInt64(1),
+                        reader.GetInt32(2),
+                        ReadString(reader, 3),
+                        ReadString(reader, 4),
+                        ReadString(reader, 5),
+                        ReadString(reader, 6)));
+                }
 
-        });
+            });
+        }
+        finally
+        {
+            _pagesSearchGate.Release();
+        }
 
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -241,21 +261,31 @@ LIMIT $limit";
         }
 
         var assets = new List<AssetRecord>();
-        await Task.Run(async () =>
+        if (!await _assetsSearchGate.WaitAsync(0))
         {
-            await using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            await connection.OpenAsync();
-
-            var assetCmd = connection.CreateCommand();
-            assetCmd.CommandText = "SELECT page_url, asset_url, asset_type FROM assets WHERE asset_url LIKE $like LIMIT $limit";
-            assetCmd.Parameters.AddWithValue("$like", "%" + query + "%");
-            assetCmd.Parameters.AddWithValue("$limit", MaxSearchResults);
-            await using var assetReader = await assetCmd.ExecuteReaderAsync();
-            while (await assetReader.ReadAsync())
+            return;
+        }
+        try
+        {
+            await Task.Run(async () =>
             {
-                assets.Add(new AssetRecord(Guid.Empty, assetReader.GetString(0), 0, assetReader.GetString(1), assetReader.GetString(2), string.Empty));
-            }
-        });
+                await using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                await connection.OpenAsync();
+
+                var assetCmd = connection.CreateCommand();
+                assetCmd.CommandText = "SELECT page_url, asset_url, asset_type FROM assets WHERE asset_url LIKE $like";
+                assetCmd.Parameters.AddWithValue("$like", "%" + query + "%");
+                await using var assetReader = await assetCmd.ExecuteReaderAsync();
+                while (await assetReader.ReadAsync())
+                {
+                    assets.Add(new AssetRecord(Guid.Empty, assetReader.GetString(0), 0, assetReader.GetString(1), assetReader.GetString(2), string.Empty));
+                }
+            });
+        }
+        finally
+        {
+            _assetsSearchGate.Release();
+        }
 
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -276,34 +306,43 @@ LIMIT $limit";
         }
 
         var metadata = new List<MetadataResult>();
-        await Task.Run(async () =>
+        if (!await _metadataSearchGate.WaitAsync(0))
         {
-            await using var connection = new SqliteConnection($"Data Source={_dbPath}");
-            await connection.OpenAsync();
+            return;
+        }
+        try
+        {
+            await Task.Run(async () =>
+            {
+                await using var connection = new SqliteConnection($"Data Source={_dbPath}");
+                await connection.OpenAsync();
 
-            static string ReadString(SqliteDataReader reader, int index) =>
-                reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
+                static string ReadString(SqliteDataReader reader, int index) =>
+                    reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
 
-            var metaCmd = connection.CreateCommand();
-            metaCmd.CommandText = @"SELECT m.url, m.title, m.description, m.og_title, m.og_description, m.h1
+                var metaCmd = connection.CreateCommand();
+                metaCmd.CommandText = @"SELECT m.url, m.title, m.og_title, m.og_video, m.twitter_player, m.h1
 FROM metadata m
 JOIN pages_fts f ON f.rowid = m.url_hash
-WHERE pages_fts MATCH $query
-LIMIT $limit";
-            metaCmd.Parameters.AddWithValue("$query", query);
-            metaCmd.Parameters.AddWithValue("$limit", MaxSearchResults);
-            await using var metaReader = await metaCmd.ExecuteReaderAsync();
-            while (await metaReader.ReadAsync())
-            {
-                metadata.Add(new MetadataResult(
-                    ReadString(metaReader, 0),
-                    ReadString(metaReader, 1),
-                    ReadString(metaReader, 2),
-                    ReadString(metaReader, 3),
-                    ReadString(metaReader, 4),
-                    ReadString(metaReader, 5)));
-            }
-        });
+WHERE pages_fts MATCH $query";
+                metaCmd.Parameters.AddWithValue("$query", query);
+                await using var metaReader = await metaCmd.ExecuteReaderAsync();
+                while (await metaReader.ReadAsync())
+                {
+                    metadata.Add(new MetadataResult(
+                        ReadString(metaReader, 0),
+                        ReadString(metaReader, 1),
+                        ReadString(metaReader, 2),
+                        ReadString(metaReader, 3),
+                        ReadString(metaReader, 4),
+                        ReadString(metaReader, 5)));
+                }
+            });
+        }
+        finally
+        {
+            _metadataSearchGate.Release();
+        }
 
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -313,6 +352,29 @@ LIMIT $limit";
                 MetadataResults.Add(result);
             }
         });
+    }
+
+    private void RefreshSearches()
+    {
+        if (string.IsNullOrWhiteSpace(_dbPath))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchPagesQuery))
+        {
+            _ = SearchPagesAsync(SearchPagesQuery);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchAssetsQuery))
+        {
+            _ = SearchAssetsAsync(SearchAssetsQuery);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchMetadataQuery))
+        {
+            _ = SearchMetadataAsync(SearchMetadataQuery);
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -333,7 +395,7 @@ LIMIT $limit";
 public sealed record MetadataResult(
     string Url,
     string Title,
-    string Description,
     string OgTitle,
-    string OgDescription,
+    string OgVideo,
+    string TwitterPlayer,
     string H1);
