@@ -282,6 +282,7 @@ class MainWindow(QMainWindow):
         if not target:
             QMessageBox.warning(self, "Invalid URL", "Please enter a valid URL.")
             return
+        print(f"Run requested for target: {target}")
         if not self._katana_available(self.katana_path_input.text().strip()):
             QMessageBox.warning(
                 self,
@@ -289,6 +290,7 @@ class MainWindow(QMainWindow):
                 "Katana was not found. Install it from https://github.com/projectdiscovery/katana "
                 "or browse to the binary in Advanced settings.",
             )
+            print("Katana binary not found; aborting run.")
             return
         self._reset_state()
         self.run_button.setEnabled(False)
@@ -298,7 +300,9 @@ class MainWindow(QMainWindow):
         self.timer.start()
         output_root = Path(self.output_root_input.text().strip())
         output_root.mkdir(parents=True, exist_ok=True)
+        print(f"Output root set to: {output_root}")
         crawl_config = self._collect_config()
+        print(f"Crawl configuration: {crawl_config}")
         self.runner = KatanaRunner(target, output_root, crawl_config)
         self.thread = CrawlThread(self.runner)
         self.runner.signals.log.connect(self.append_log)
@@ -314,6 +318,7 @@ class MainWindow(QMainWindow):
             self.runner.stop()
         self.stop_button.setEnabled(False)
         self.append_log("Stopping crawl...")
+        print("Stop requested by user.")
 
     def append_log(self, line: str) -> None:
         if not line:

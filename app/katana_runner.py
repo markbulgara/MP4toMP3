@@ -47,6 +47,7 @@ class KatanaRunner(QObject):
 
     def stop(self) -> None:
         self._stop_requested = True
+        print("Crawl stop requested.")
         if self._current_process and self._current_process.poll() is None:
             self._terminate_process(self._current_process)
 
@@ -66,8 +67,10 @@ class KatanaRunner(QObject):
 
         try:
             self.signals.log.emit("Starting crawl...")
+            print(f"Starting crawl for target: {self.target}")
             help_text = self._katana_help()
             version_text = self._katana_version()
+            print(f"Katana version: {version_text or 'unknown'}")
 
             pass_totals["urls"] += self._run_pass(
                 "Pass A: URL discovery",
@@ -105,12 +108,18 @@ class KatanaRunner(QObject):
                 )
             else:
                 self.signals.log.emit("Pass D skipped (XHR disabled).")
+                print("Pass D skipped (XHR disabled).")
 
             if self._stop_requested:
                 raise RuntimeError("Crawl cancelled by user.")
 
             urls = sorted(url_set)
             assets_list = sorted(assets)
+            print(
+                "Crawl finished. URLs: "
+                f"{len(urls)}, Pages: {len(pages)}, Assets: {len(assets_list)}, "
+                f"XHR: {len(xhr_items)}"
+            )
             self._write_outputs(
                 run_dir,
                 start_time,
@@ -122,10 +131,12 @@ class KatanaRunner(QObject):
                 version_text,
             )
             self.signals.completed.emit(run_dir)
+            print(f"Results written to: {run_dir}")
         except Exception as exc:
             message = str(exc)
             self.signals.error.emit(message)
             self.signals.failed.emit(message)
+            print(f"Crawl failed: {message}")
         finally:
             log_handle.close()
 
@@ -205,6 +216,7 @@ class KatanaRunner(QObject):
             return 0
         self.signals.log.emit(title)
         self.signals.log.emit(" ".join(args))
+        print(f"{title} command: {' '.join(args)}")
         count = 0
         for line in self._stream_process(args, log_handle):
             if self._stop_requested:
@@ -215,6 +227,7 @@ class KatanaRunner(QObject):
             if handled:
                 count += 1
                 self.signals.progress.emit({"kind": kind})
+        print(f"{title} discovered {count} {kind}.")
         return count
 
     def _stream_process(self, args: List[str], log_handle) -> Iterable[str]:
@@ -273,6 +286,7 @@ class KatanaRunner(QObject):
                     log_handle.flush()
                     if cleaned:
                         self.signals.log.emit(cleaned)
+                        print(f"katana stderr: {cleaned}")
                     continue
                 if cleaned:
                     yield cleaned
