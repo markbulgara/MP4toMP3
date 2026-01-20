@@ -1,9 +1,9 @@
 # Katana Video Site Crawler
 
-A cross-platform desktop application for running ProjectDiscovery Katana against a single video-site domain with safe defaults and an advanced configuration panel. The user provides only a target URL and clicks **Run Crawl**; the preset runs all required passes and merges results.
+A Windows desktop application for running ProjectDiscovery Katana against a single video-site domain with safe defaults and an advanced configuration panel. The user provides only a target URL and clicks **Run Crawl**; the preset runs all required passes and merges results.
 
 ## Why PySide6
-PySide6 (Qt) provides fast delivery for a native Windows desktop app while staying cross-platform. Packaging is handled with PyInstaller.
+PySide6 (Qt) provides fast delivery for a native Windows desktop app. Packaging is handled with PyInstaller.
 
 ## Features
 - One-click **Video Site Crawl** preset (URL discovery, metadata extraction, asset discovery, XHR discovery).
@@ -13,6 +13,7 @@ PySide6 (Qt) provides fast delivery for a native Windows desktop app while stayi
 - Katana auto-detection with the option to browse to a custom binary.
 
 ## Requirements
+- Windows 10/11
 - Python 3.10+ recommended
 - ProjectDiscovery Katana installed and available on PATH (or choose the binary in Advanced settings)
 

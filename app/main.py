@@ -2,6 +2,7 @@ import json
 import shutil
 import sys
 import time
+import platform
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -504,6 +505,9 @@ class MainWindow(QMainWindow):
 
 
 def main() -> None:
+    if platform.system().lower() != "windows":
+        print("This application is supported on Windows only.")
+        sys.exit(1)
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
