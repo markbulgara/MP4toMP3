@@ -17,7 +17,7 @@ public static class Hashing
 
         if (len >= 32)
         {
-            ulong v1 = prime1 + prime2;
+            ulong v1 = unchecked(prime1 + prime2);
             ulong v2 = prime2;
             ulong v3 = 0;
             ulong v4 = unchecked(0ul - prime1);
