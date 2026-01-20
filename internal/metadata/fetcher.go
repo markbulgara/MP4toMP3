@@ -5,13 +5,14 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/net/html"
 )
 
-const maxBodyBytes = 2 * 1024 * 1024
+const maxPreviewBytes = 64 * 1024
 
 type Result struct {
 	Title       string
@@ -19,15 +20,38 @@ type Result struct {
 	Keywords    string
 	ContentType string
 	StatusCode  int
+	Bytes       int64
 }
 
 func Fetch(ctx context.Context, client *http.Client, url string) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {
 		return Result{}, err
 	}
 
-	resp, err := client.Do(req)
+	headResp, err := client.Do(headReq)
+	if err == nil {
+		headResp.Body.Close()
+		result := Result{
+			ContentType: headResp.Header.Get("Content-Type"),
+			StatusCode:  headResp.StatusCode,
+			Bytes:       headResp.ContentLength,
+		}
+		if result.Bytes < 0 {
+			result.Bytes = parseLength(headResp.Header.Get("Content-Length"))
+		}
+		if headResp.StatusCode != http.StatusMethodNotAllowed && headResp.StatusCode != http.StatusForbidden &&
+			result.ContentType != "" {
+			return result, nil
+		}
+	}
+
+	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return Result{}, err
+	}
+	getReq.Header.Set("Range", "bytes=0-65535")
+	resp, err := client.Do(getReq)
 	if err != nil {
 		return Result{}, err
 	}
@@ -36,9 +60,13 @@ func Fetch(ctx context.Context, client *http.Client, url string) (Result, error)
 	result := Result{
 		ContentType: resp.Header.Get("Content-Type"),
 		StatusCode:  resp.StatusCode,
+		Bytes:       resp.ContentLength,
+	}
+	if result.Bytes < 0 {
+		result.Bytes = parseLength(resp.Header.Get("Content-Length"))
 	}
 
-	limited := io.LimitReader(resp.Body, maxBodyBytes)
+	limited := io.LimitReader(resp.Body, maxPreviewBytes)
 	body, err := io.ReadAll(limited)
 	if err != nil {
 		return result, err
@@ -48,7 +76,10 @@ func Fetch(ctx context.Context, client *http.Client, url string) (Result, error)
 		return result, nil
 	}
 
-	return parseHTML(body, result), nil
+	parsed := parseHTML(body, result)
+	parsed.Description = ""
+	parsed.Keywords = ""
+	return parsed, nil
 }
 
 func parseHTML(body []byte, result Result) Result {
@@ -138,4 +169,15 @@ func (u userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		cloned.Header.Set("User-Agent", u.userAgent)
 	}
 	return u.base.RoundTrip(cloned)
+}
+
+func parseLength(value string) int64 {
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }

@@ -1,6 +1,6 @@
 # Katana Indexer (Simple)
 
-A minimal wrapper around [Katana](https://github.com/projectdiscovery/katana) that crawls a domain, stores page metadata in SQLite (FTS5), and lets you search metadata from the command line.
+A minimal wrapper around [Katana](https://github.com/projectdiscovery/katana) that crawls a domain, stores URL metadata in SQLite, and lets you search by URL/title (no full page indexing).
 
 ## Requirements
 
@@ -19,17 +19,40 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 
 ## Crawl
 
+Basic crawl with Katana:
+
 ```powershell
 .\bin\katana-indexer.exe crawl --domain https://example.com --db data\index.db
 ```
 
-## Search
+SPA fallback using sitemap/robots:
+
+```powershell
+.\bin\katana-indexer.exe crawl --domain https://example.com --use-robots --use-sitemap --db data\index.db
+```
+
+Seeding known entrypoints:
+
+```powershell
+.\bin\katana-indexer.exe crawl --domain https://example.com --seed-url https://example.com/#/spells --seed-file seeds.txt --db data\index.db
+```
+
+## Search (CLI)
 
 ```powershell
 .\bin\katana-indexer.exe search --db data\index.db --q "video download"
 ```
 
+## Serve (Web UI)
+
+```powershell
+.\bin\katana-indexer.exe serve --db data\index.db --addr :8080
+```
+
+Open `http://localhost:8080` and search by URL or title.
+
 ## Notes
 
-- Metadata captured: title, description, keywords, content-type, status code.
+- URL inventory metadata: URL, first/last seen, source, status, content-type, title, bytes, fetched_at.
+- Sources include: katana, robots, sitemap, seed-file, seed-url.
 - Use `--katana-path` if Katana is not on your PATH.

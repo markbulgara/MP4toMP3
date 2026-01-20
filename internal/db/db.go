@@ -14,53 +14,36 @@ PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA temp_store=MEMORY;
 
-CREATE TABLE IF NOT EXISTS pages (
+CREATE TABLE IF NOT EXISTS urls (
 	url TEXT PRIMARY KEY,
-	title TEXT,
-	description TEXT,
-	keywords TEXT,
+	first_seen TEXT NOT NULL,
+	last_seen TEXT NOT NULL,
+	source TEXT,
+	status INTEGER,
 	content_type TEXT,
-	status_code INTEGER,
-	last_seen TIMESTAMP NOT NULL,
-	fetched_at TIMESTAMP
+	title TEXT,
+	fetched_at TEXT,
+	bytes INTEGER
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-	url,
-	title,
-	description,
-	keywords,
-	content='pages',
-	content_rowid='rowid'
+CREATE TABLE IF NOT EXISTS url_sources (
+	url TEXT NOT NULL,
+	source TEXT NOT NULL,
+	seen_at TEXT NOT NULL,
+	PRIMARY KEY (url, source)
 );
-
-CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
-	INSERT INTO pages_fts(rowid, url, title, description, keywords)
-	VALUES (new.rowid, new.url, new.title, new.description, new.keywords);
-END;
-
-CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages BEGIN
-	INSERT INTO pages_fts(pages_fts, rowid, url, title, description, keywords)
-	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords);
-END;
-
-CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
-	INSERT INTO pages_fts(pages_fts, rowid, url, title, description, keywords)
-	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords);
-	INSERT INTO pages_fts(rowid, url, title, description, keywords)
-	VALUES (new.rowid, new.url, new.title, new.description, new.keywords);
-END;
 `
 
 type Entry struct {
 	URL         string
-	Title       string
-	Description string
-	Keywords    string
-	ContentType string
-	StatusCode  int
+	FirstSeen   time.Time
 	LastSeen    time.Time
+	Source      string
+	Status      *int
+	ContentType string
+	Title       string
 	FetchedAt   *time.Time
+	Bytes       *int64
 }
 
 func Open(path string) (*sql.DB, error) {
@@ -79,34 +62,32 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Upsert(dbConn *sql.DB, entry Entry) error {
+func UpsertURL(dbConn *sql.DB, url string, source string, seenAt time.Time) error {
+	now := seenAt.UTC().Format(time.RFC3339)
 	_, err := dbConn.Exec(`
-		INSERT INTO pages (url, title, description, keywords, content_type, status_code, last_seen, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO urls (url, first_seen, last_seen, source)
+		VALUES (?, ?, ?, ?)
 		ON CONFLICT(url) DO UPDATE SET
-			title=excluded.title,
-			description=excluded.description,
-			keywords=excluded.keywords,
-			content_type=excluded.content_type,
-			status_code=excluded.status_code,
 			last_seen=excluded.last_seen,
-			fetched_at=excluded.fetched_at
-	`,
-		entry.URL,
-		entry.Title,
-		entry.Description,
-		entry.Keywords,
-		entry.ContentType,
-		entry.StatusCode,
-		entry.LastSeen,
-		entry.FetchedAt,
-	)
+			source=excluded.source
+	`, url, now, now, source)
+	return err
+}
+
+func RecordSource(dbConn *sql.DB, url string, source string, seenAt time.Time) error {
+	if url == "" || source == "" {
+		return nil
+	}
+	_, err := dbConn.Exec(`
+		INSERT OR IGNORE INTO url_sources (url, source, seen_at)
+		VALUES (?, ?, ?)
+	`, url, source, seenAt.UTC().Format(time.RFC3339))
 	return err
 }
 
 func NeedsFetch(dbConn *sql.DB, url string) (bool, error) {
-	var fetchedAt sql.NullTime
-	err := dbConn.QueryRow("SELECT fetched_at FROM pages WHERE url = ?", url).Scan(&fetchedAt)
+	var fetchedAt sql.NullString
+	err := dbConn.QueryRow("SELECT fetched_at FROM urls WHERE url = ?", url).Scan(&fetchedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return true, nil
@@ -116,11 +97,44 @@ func NeedsFetch(dbConn *sql.DB, url string) (bool, error) {
 	return !fetchedAt.Valid, nil
 }
 
+func UpdateMetadata(dbConn *sql.DB, entry Entry) error {
+	var status sql.NullInt64
+	if entry.Status != nil {
+		status = sql.NullInt64{Int64: int64(*entry.Status), Valid: true}
+	}
+	var fetchedAt sql.NullString
+	if entry.FetchedAt != nil {
+		fetchedAt = sql.NullString{String: entry.FetchedAt.UTC().Format(time.RFC3339), Valid: true}
+	}
+	var bytes sql.NullInt64
+	if entry.Bytes != nil {
+		bytes = sql.NullInt64{Int64: *entry.Bytes, Valid: true}
+	}
+
+	_, err := dbConn.Exec(`
+		UPDATE urls SET
+			status = ?,
+			content_type = ?,
+			title = ?,
+			fetched_at = ?,
+			bytes = ?
+		WHERE url = ?
+	`,
+		status,
+		entry.ContentType,
+		entry.Title,
+		fetchedAt,
+		bytes,
+		entry.URL,
+	)
+	return err
+}
+
 func Search(dbConn *sql.DB, query string, limit int, offset int) ([]Entry, error) {
 	if query == "" {
 		rows, err := dbConn.Query(`
-			SELECT url, title, description, keywords, content_type, status_code, last_seen, fetched_at
-			FROM pages
+			SELECT url, first_seen, last_seen, source, status, content_type, title, fetched_at, bytes
+			FROM urls
 			ORDER BY last_seen DESC
 			LIMIT ? OFFSET ?
 		`, limit, offset)
@@ -131,13 +145,14 @@ func Search(dbConn *sql.DB, query string, limit int, offset int) ([]Entry, error
 		return scanRows(rows)
 	}
 
+	likeQuery := "%" + query + "%"
 	rows, err := dbConn.Query(`
-		SELECT url, title, description, keywords, content_type, status_code, last_seen, fetched_at
-		FROM pages
-		WHERE rowid IN (SELECT rowid FROM pages_fts WHERE pages_fts MATCH ?)
+		SELECT url, first_seen, last_seen, source, status, content_type, title, fetched_at, bytes
+		FROM urls
+		WHERE url LIKE ? OR title LIKE ?
 		ORDER BY last_seen DESC
 		LIMIT ? OFFSET ?
-	`, query, limit, offset)
+	`, likeQuery, likeQuery, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -149,31 +164,49 @@ func scanRows(rows *sql.Rows) ([]Entry, error) {
 	results := []Entry{}
 	for rows.Next() {
 		var entry Entry
-		var fetchedAt sql.NullTime
+		var firstSeen sql.NullString
+		var lastSeen sql.NullString
+		var status sql.NullInt64
+		var fetchedAt sql.NullString
+		var bytes sql.NullInt64
 		err := rows.Scan(
 			&entry.URL,
-			&entry.Title,
-			&entry.Description,
-			&entry.Keywords,
+			&firstSeen,
+			&lastSeen,
+			&entry.Source,
+			&status,
 			&entry.ContentType,
-			&entry.StatusCode,
-			&entry.LastSeen,
+			&entry.Title,
 			&fetchedAt,
+			&bytes,
 		)
 		if err != nil {
 			return nil, err
 		}
+		if firstSeen.Valid {
+			if parsed, err := time.Parse(time.RFC3339, firstSeen.String); err == nil {
+				entry.FirstSeen = parsed
+			}
+		}
+		if lastSeen.Valid {
+			if parsed, err := time.Parse(time.RFC3339, lastSeen.String); err == nil {
+				entry.LastSeen = parsed
+			}
+		}
+		if status.Valid {
+			value := int(status.Int64)
+			entry.Status = &value
+		}
 		if fetchedAt.Valid {
-			entry.FetchedAt = &fetchedAt.Time
+			if parsed, err := time.Parse(time.RFC3339, fetchedAt.String); err == nil {
+				entry.FetchedAt = &parsed
+			}
+		}
+		if bytes.Valid {
+			value := bytes.Int64
+			entry.Bytes = &value
 		}
 		results = append(results, entry)
 	}
 	return results, rows.Err()
-}
-
-func DefaultEntry(url string) Entry {
-	return Entry{
-		URL:      url,
-		LastSeen: time.Now().UTC(),
-	}
 }
