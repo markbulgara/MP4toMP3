@@ -18,6 +18,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _statsErrors = "0";
     private string _statsAssets = "0";
     private string _statsPagesPerMinute = "0";
+    private bool _respectRobots = true;
+    private bool _sameHostOnly = true;
+    private bool _highThroughput;
+    private bool _enableEnrichment = true;
     private CancellationTokenSource? _cts;
     private CrawlerEngine? _engine;
     private SqliteCrawlStore? _store;
@@ -25,7 +29,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<PageRecord> Pages { get; } = new();
     public ObservableCollection<AssetRecord> Assets { get; } = new();
+    public ObservableCollection<MetadataResult> MetadataResults { get; } = new();
     public ObservableCollection<string> Logs { get; } = new();
+    public ObservableCollection<string> Errors { get; } = new();
 
     public RelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
@@ -54,6 +60,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string StatsErrors { get => _statsErrors; set => SetField(ref _statsErrors, value); }
     public string StatsAssets { get => _statsAssets; set => SetField(ref _statsAssets, value); }
     public string StatsPagesPerMinute { get => _statsPagesPerMinute; set => SetField(ref _statsPagesPerMinute, value); }
+    public bool RespectRobots { get => _respectRobots; set => SetField(ref _respectRobots, value); }
+    public bool SameHostOnly { get => _sameHostOnly; set => SetField(ref _sameHostOnly, value); }
+    public bool HighThroughput { get => _highThroughput; set => SetField(ref _highThroughput, value); }
+    public bool EnableEnrichment { get => _enableEnrichment; set => SetField(ref _enableEnrichment, value); }
 
     public MainViewModel()
     {
@@ -75,7 +85,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _store = new SqliteCrawlStore(_dbPath);
         await _store.InitializeAsync();
 
-        var settings = new CrawlSettings();
+        var settings = new CrawlSettings
+        {
+            RespectRobots = RespectRobots,
+            SameHostOnly = SameHostOnly,
+            EnableEnrichment = EnableEnrichment
+        };
+
+        if (HighThroughput)
+        {
+            settings = settings.WithHighThroughputDefaults();
+        }
         var logBuffer = new CrawlEventBuffer();
         _engine = new CrawlerEngine(settings, _store, logBuffer);
         _engine.StatsUpdated += UpdateStats;
@@ -118,6 +138,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 Logs.RemoveAt(0);
             }
+
+            if (string.Equals(entry.Level, "error", StringComparison.OrdinalIgnoreCase))
+            {
+                Errors.Add($"[{entry.Timestamp:HH:mm:ss}] {entry.Message}");
+                if (Errors.Count > 2000)
+                {
+                    Errors.RemoveAt(0);
+                }
+            }
         });
     }
 
@@ -130,11 +159,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var pages = new List<PageRecord>();
         var assets = new List<AssetRecord>();
+        var metadata = new List<MetadataResult>();
 
         await Task.Run(async () =>
         {
             await using var connection = new SqliteConnection($"Data Source={_dbPath}");
             await connection.OpenAsync();
+
+            static string ReadString(SqliteDataReader reader, int index) =>
+                reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
 
             var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT p.url, p.url_hash, p.status_code, p.content_type, p.title_snippet, p.final_url, p.referrer
@@ -152,10 +185,10 @@ LIMIT 200";
                     reader.GetString(0),
                     (ulong)reader.GetInt64(1),
                     reader.GetInt32(2),
-                    reader.GetString(3),
-                    reader.GetString(4),
-                    reader.GetString(5),
-                    reader.GetString(6)));
+                    ReadString(reader, 3),
+                    ReadString(reader, 4),
+                    ReadString(reader, 5),
+                    ReadString(reader, 6)));
             }
 
             var assetCmd = connection.CreateCommand();
@@ -165,6 +198,25 @@ LIMIT 200";
             while (await assetReader.ReadAsync())
             {
                 assets.Add(new AssetRecord(Guid.Empty, assetReader.GetString(0), 0, assetReader.GetString(1), assetReader.GetString(2), string.Empty));
+            }
+
+            var metaCmd = connection.CreateCommand();
+            metaCmd.CommandText = @"SELECT m.url, m.title, m.description, m.og_title, m.og_description, m.h1
+FROM metadata m
+JOIN pages_fts f ON f.rowid = m.url_hash
+WHERE pages_fts MATCH $query
+LIMIT 200";
+            metaCmd.Parameters.AddWithValue("$query", query);
+            await using var metaReader = await metaCmd.ExecuteReaderAsync();
+            while (await metaReader.ReadAsync())
+            {
+                metadata.Add(new MetadataResult(
+                    ReadString(metaReader, 0),
+                    ReadString(metaReader, 1),
+                    ReadString(metaReader, 2),
+                    ReadString(metaReader, 3),
+                    ReadString(metaReader, 4),
+                    ReadString(metaReader, 5)));
             }
         });
 
@@ -180,6 +232,12 @@ LIMIT 200";
             foreach (var asset in assets)
             {
                 Assets.Add(asset);
+            }
+
+            MetadataResults.Clear();
+            foreach (var result in metadata)
+            {
+                MetadataResults.Add(result);
             }
         });
     }
@@ -198,3 +256,11 @@ LIMIT 200";
         return true;
     }
 }
+
+public sealed record MetadataResult(
+    string Url,
+    string Title,
+    string Description,
+    string OgTitle,
+    string OgDescription,
+    string H1);

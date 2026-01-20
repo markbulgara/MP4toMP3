@@ -16,10 +16,18 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,12">
-            <TextBox Width="480" Margin="0,0,12,0" Text="{Binding TargetUrl, UpdateSourceTrigger=PropertyChanged}" />
-            <Button Content="Start" Width="120" Margin="0,0,8,0" Command="{Binding StartCommand}" />
-            <Button Content="Stop" Width="120" Command="{Binding StopCommand}" />
+        <StackPanel Orientation="Vertical" Grid.Row="0" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBox Width="480" Margin="0,0,12,0" Text="{Binding TargetUrl, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Content="Start" Width="120" Margin="0,0,8,0" Command="{Binding StartCommand}" />
+                <Button Content="Stop" Width="120" Command="{Binding StopCommand}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton Content="Respect Robots" IsChecked="{Binding RespectRobots}" Margin="0,0,8,0" />
+                <ToggleButton Content="Same Host Only" IsChecked="{Binding SameHostOnly}" Margin="0,0,8,0" />
+                <ToggleButton Content="High Throughput" IsChecked="{Binding HighThroughput}" Margin="0,0,8,0" />
+                <ToggleButton Content="Enable Enrichment" IsChecked="{Binding EnableEnrichment}" />
+            </StackPanel>
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12" >
@@ -59,8 +67,23 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+            <TabItem Header="Metadata">
+                <DataGrid ItemsSource="{Binding MetadataResults}" AutoGenerateColumns="False" IsReadOnly="True" EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*" />
+                        <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="240" />
+                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="300" />
+                        <DataGridTextColumn Header="OG Title" Binding="{Binding OgTitle}" Width="240" />
+                        <DataGridTextColumn Header="OG Description" Binding="{Binding OgDescription}" Width="300" />
+                        <DataGridTextColumn Header="H1" Binding="{Binding H1}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
             <TabItem Header="Logs">
                 <ListBox ItemsSource="{Binding Logs}" />
+            </TabItem>
+            <TabItem Header="Errors">
+                <ListBox ItemsSource="{Binding Errors}" />
             </TabItem>
         </TabControl>
     </Grid>
