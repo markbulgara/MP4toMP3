@@ -90,6 +90,21 @@ Then rebuild:
 go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 ```
 
+### CGO/sqlite3 error (Windows)
+
+If the GUI shows: **“Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work”**, the binary was built without CGO support. Fix it by enabling CGO and using a C compiler:
+
+1. Install a C compiler (one of the following):
+   - **MSYS2 + mingw-w64** (recommended) or
+   - **Visual Studio Build Tools**
+2. Build with CGO enabled:
+   ```powershell
+   $env:CGO_ENABLED=1
+   go build -o bin\katana-indexer.exe .\cmd\katana-indexer
+   ```
+
+If you are building in an environment that cannot use CGO, you will need a different SQLite driver that does not require CGO.
+
 ## Flags
 
 ### `crawl`
