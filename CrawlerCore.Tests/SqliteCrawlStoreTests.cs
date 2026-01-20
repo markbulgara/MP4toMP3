@@ -22,7 +22,12 @@ public class SqliteCrawlStoreTests
             store.BufferPage(new PageRecord(run.RunId, url, hash, 200, "text/html", "Video title", url, string.Empty));
             await store.FlushPagesAsync(10);
 
-            store.BufferMetadata(new EnrichedMetadata(hash, url, "Video title", "desc", "og", "ogdesc", "video", "player", "H1"));
+            var metaTags = new List<MetaTagRecord>
+            {
+                new("og:video", "video"),
+                new("twitter:player", "player")
+            };
+            store.BufferMetadata(new EnrichedMetadata(hash, url, "Video title", metaTags));
             await store.FlushMetadataAsync(10);
 
             await using var connection = new SqliteConnection($"Data Source={tempPath}");
@@ -31,6 +36,11 @@ public class SqliteCrawlStoreTests
             cmd.CommandText = "SELECT rowid FROM pages_fts WHERE pages_fts MATCH 'Video'";
             var result = await cmd.ExecuteScalarAsync();
             Assert.NotNull(result);
+
+            var metaCmd = connection.CreateCommand();
+            metaCmd.CommandText = "SELECT rowid FROM meta_fts WHERE meta_fts MATCH 'video'";
+            var metaResult = await metaCmd.ExecuteScalarAsync();
+            Assert.NotNull(metaResult);
         }
         finally
         {

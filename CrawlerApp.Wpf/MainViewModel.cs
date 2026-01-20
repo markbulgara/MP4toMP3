@@ -102,7 +102,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         StopCommand = new RelayCommand(Stop, () => _engine is not null);
         _searchRefreshTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(2)
+            Interval = TimeSpan.FromSeconds(1)
         };
         _searchRefreshTimer.Tick += (_, _) => RefreshSearches();
     }
@@ -114,7 +114,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var outputDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CrawlerApp", DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss"));
+        var outputDir = Path.Combine(AppContext.BaseDirectory, "results", DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss"));
         Directory.CreateDirectory(outputDir);
         _dbPath = Path.Combine(outputDir, "crawl.db");
 
@@ -321,10 +321,9 @@ WHERE pages_fts MATCH $query";
                     reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
 
                 var metaCmd = connection.CreateCommand();
-                metaCmd.CommandText = @"SELECT m.url, m.title, m.og_title, m.og_video, m.twitter_player, m.h1
-FROM metadata m
-JOIN pages_fts f ON f.rowid = m.url_hash
-WHERE pages_fts MATCH $query";
+                metaCmd.CommandText = @"SELECT url, title, meta_name, meta_content
+FROM meta_fts
+WHERE meta_fts MATCH $query";
                 metaCmd.Parameters.AddWithValue("$query", query);
                 await using var metaReader = await metaCmd.ExecuteReaderAsync();
                 while (await metaReader.ReadAsync())
@@ -333,9 +332,7 @@ WHERE pages_fts MATCH $query";
                         ReadString(metaReader, 0),
                         ReadString(metaReader, 1),
                         ReadString(metaReader, 2),
-                        ReadString(metaReader, 3),
-                        ReadString(metaReader, 4),
-                        ReadString(metaReader, 5)));
+                        ReadString(metaReader, 3)));
                 }
             });
         }
@@ -395,7 +392,5 @@ WHERE pages_fts MATCH $query";
 public sealed record MetadataResult(
     string Url,
     string Title,
-    string OgTitle,
-    string OgVideo,
-    string TwitterPlayer,
-    string H1);
+    string MetaName,
+    string MetaContent);

@@ -172,7 +172,7 @@ public sealed class CrawlerEngine : IAsyncDisposable
 
             await _parseChannel.Writer.WriteAsync(parse, cancellationToken);
 
-            if (_settings.EnableEnrichment && result.Body is not null && IsLikelyVideoPage(parse))
+            if (_settings.EnableEnrichment && result.Body is not null)
             {
                 var html = System.Text.Encoding.UTF8.GetString(result.Body);
                 var urlHash = Hashing.XxHash64(parse.Url);
@@ -272,16 +272,6 @@ public sealed class CrawlerEngine : IAsyncDisposable
         await _store.DisposeAsync();
     }
 
-    private static bool IsLikelyVideoPage(ParseResult parse)
-    {
-        if (parse.Assets.Count > 0)
-        {
-            return true;
-        }
-
-        return parse.Url.Contains("video", StringComparison.OrdinalIgnoreCase) ||
-               parse.Url.Contains("watch", StringComparison.OrdinalIgnoreCase);
-    }
 }
 
 public sealed class RobotsCache

@@ -108,12 +108,9 @@ public sealed record EnrichedMetadata(
     ulong UrlHash,
     string Url,
     string? Title,
-    string? Description,
-    string? OgTitle,
-    string? OgDescription,
-    string? OgVideo,
-    string? TwitterPlayer,
-    string? H1);
+    IReadOnlyList<MetaTagRecord> MetaTags);
+
+public sealed record MetaTagRecord(string Name, string Content);
 
 public sealed record CrawlLogEntry(DateTimeOffset Timestamp, string Level, string Message);
 

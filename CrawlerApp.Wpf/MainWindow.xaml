@@ -77,10 +77,8 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="URL" Binding="{Binding Url}" Width="*" />
                             <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="240" />
-                            <DataGridTextColumn Header="OG Title" Binding="{Binding OgTitle}" Width="240" />
-                            <DataGridTextColumn Header="OG Video" Binding="{Binding OgVideo}" Width="240" />
-                            <DataGridTextColumn Header="Twitter Player" Binding="{Binding TwitterPlayer}" Width="240" />
-                            <DataGridTextColumn Header="H1" Binding="{Binding H1}" Width="240" />
+                            <DataGridTextColumn Header="Meta Name" Binding="{Binding MetaName}" Width="240" />
+                            <DataGridTextColumn Header="Meta Content" Binding="{Binding MetaContent}" Width="400" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

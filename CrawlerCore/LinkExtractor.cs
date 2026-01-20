@@ -87,12 +87,7 @@ public sealed class LinkExtractor
             urlHash,
             url,
             ExtractTagContent(html, "title"),
-            ExtractMetaContent(html, "description"),
-            ExtractMetaContent(html, "og:title"),
-            ExtractMetaContent(html, "og:description"),
-            ExtractMetaContent(html, "og:video"),
-            ExtractMetaContent(html, "twitter:player"),
-            ExtractTagContent(html, "h1"));
+            ExtractMetaTags(html));
     }
 
     private static void ExtractAttributeLinks(string content, string attribute, HashSet<string> output)
@@ -173,46 +168,29 @@ public sealed class LinkExtractor
         return content.Substring(start, end - start).Trim();
     }
 
-    private static string? ExtractMetaContent(string html, string name)
+    private static IReadOnlyList<MetaTagRecord> ExtractMetaTags(string html)
     {
-        var pattern = "name=\"" + name + "\"";
-        var propertyPattern = "property=\"" + name + "\"";
-        var idx = html.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
+        var results = new List<MetaTagRecord>();
+        foreach (Match match in Regex.Matches(html, "<meta\\s+[^>]*>", RegexOptions.IgnoreCase))
         {
-            idx = html.IndexOf(propertyPattern, StringComparison.OrdinalIgnoreCase);
+            var tag = match.Value;
+            var name = ExtractAttribute(tag, "name") ?? ExtractAttribute(tag, "property");
+            var content = ExtractAttribute(tag, "content");
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(content))
+            {
+                continue;
+            }
+
+            results.Add(new MetaTagRecord(name.Trim(), content.Trim()));
         }
 
-        if (idx < 0)
-        {
-            return null;
-        }
+        return results;
+    }
 
-        var contentIndex = html.IndexOf("content=", idx, StringComparison.OrdinalIgnoreCase);
-        if (contentIndex < 0)
-        {
-            return null;
-        }
-
-        contentIndex += "content=".Length;
-        if (contentIndex >= html.Length)
-        {
-            return null;
-        }
-
-        var quote = html[contentIndex];
-        if (quote != '\'' && quote != '"')
-        {
-            return null;
-        }
-
-        contentIndex++;
-        var end = html.IndexOf(quote, contentIndex);
-        if (end < 0)
-        {
-            return null;
-        }
-
-        return html.Substring(contentIndex, end - contentIndex).Trim();
+    private static string? ExtractAttribute(string tag, string attribute)
+    {
+        var pattern = attribute + "\\s*=\\s*([\"'])(?<value>.*?)\\1";
+        var match = Regex.Match(tag, pattern, RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["value"].Value : null;
     }
 }

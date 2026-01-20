@@ -61,21 +61,23 @@ CREATE TABLE IF NOT EXISTS seen (
 CREATE TABLE IF NOT EXISTS metadata (
     url_hash INTEGER PRIMARY KEY,
     url TEXT NOT NULL,
-    title TEXT,
-    description TEXT,
-    og_title TEXT,
-    og_description TEXT,
-    og_video TEXT,
-    twitter_player TEXT,
-    h1 TEXT
+    title TEXT
+);
+CREATE TABLE IF NOT EXISTS meta_tags (
+    url_hash INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
     url,
     title,
-    description,
-    og_title,
-    og_description,
-    h1,
+    content=''
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS meta_fts USING fts5(
+    url,
+    title,
+    meta_name,
+    meta_content,
     content=''
 );
 ");
@@ -222,8 +224,8 @@ VALUES ($runId, $hash, $pageUrl, $assetUrl, $assetType, $referrer)";
 
         using var transaction = _connection.BeginTransaction();
         var cmd = _connection.CreateCommand();
-        cmd.CommandText = @"INSERT OR REPLACE INTO metadata (url_hash, url, title, description, og_title, og_description, og_video, twitter_player, h1)
-VALUES ($hash, $url, $title, $description, $ogTitle, $ogDescription, $ogVideo, $twitter, $h1)";
+        cmd.CommandText = @"INSERT OR REPLACE INTO metadata (url_hash, url, title)
+VALUES ($hash, $url, $title)";
         var hashParam = cmd.CreateParameter();
         hashParam.ParameterName = "$hash";
         cmd.Parameters.Add(hashParam);
@@ -233,42 +235,37 @@ VALUES ($hash, $url, $title, $description, $ogTitle, $ogDescription, $ogVideo, $
         var titleParam = cmd.CreateParameter();
         titleParam.ParameterName = "$title";
         cmd.Parameters.Add(titleParam);
-        var descParam = cmd.CreateParameter();
-        descParam.ParameterName = "$description";
-        cmd.Parameters.Add(descParam);
-        var ogTitleParam = cmd.CreateParameter();
-        ogTitleParam.ParameterName = "$ogTitle";
-        cmd.Parameters.Add(ogTitleParam);
-        var ogDescParam = cmd.CreateParameter();
-        ogDescParam.ParameterName = "$ogDescription";
-        cmd.Parameters.Add(ogDescParam);
-        var ogVideoParam = cmd.CreateParameter();
-        ogVideoParam.ParameterName = "$ogVideo";
-        cmd.Parameters.Add(ogVideoParam);
-        var twitterParam = cmd.CreateParameter();
-        twitterParam.ParameterName = "$twitter";
-        cmd.Parameters.Add(twitterParam);
-        var h1Param = cmd.CreateParameter();
-        h1Param.ParameterName = "$h1";
-        cmd.Parameters.Add(h1Param);
 
         foreach (var record in batch)
         {
             hashParam.Value = (long)record.UrlHash;
             urlParam.Value = record.Url;
             titleParam.Value = record.Title ?? string.Empty;
-            descParam.Value = record.Description ?? string.Empty;
-            ogTitleParam.Value = record.OgTitle ?? string.Empty;
-            ogDescParam.Value = record.OgDescription ?? string.Empty;
-            ogVideoParam.Value = record.OgVideo ?? string.Empty;
-            twitterParam.Value = record.TwitterPlayer ?? string.Empty;
-            h1Param.Value = record.H1 ?? string.Empty;
             await cmd.ExecuteNonQueryAsync();
         }
 
+        var deleteTagsCmd = _connection.CreateCommand();
+        deleteTagsCmd.CommandText = "DELETE FROM meta_tags WHERE url_hash = $hash";
+        var deleteHashParam = deleteTagsCmd.CreateParameter();
+        deleteHashParam.ParameterName = "$hash";
+        deleteTagsCmd.Parameters.Add(deleteHashParam);
+
+        var insertTagCmd = _connection.CreateCommand();
+        insertTagCmd.CommandText = @"INSERT INTO meta_tags (url_hash, name, content)
+VALUES ($hash, $name, $content)";
+        var tagHashParam = insertTagCmd.CreateParameter();
+        tagHashParam.ParameterName = "$hash";
+        insertTagCmd.Parameters.Add(tagHashParam);
+        var nameParam = insertTagCmd.CreateParameter();
+        nameParam.ParameterName = "$name";
+        insertTagCmd.Parameters.Add(nameParam);
+        var contentParam = insertTagCmd.CreateParameter();
+        contentParam.ParameterName = "$content";
+        insertTagCmd.Parameters.Add(contentParam);
+
         var ftsCmd = _connection.CreateCommand();
-        ftsCmd.CommandText = @"INSERT INTO pages_fts (rowid, url, title, description, og_title, og_description, h1)
-VALUES ($rowid, $url, $title, $desc, $ogTitle, $ogDesc, $h1)";
+        ftsCmd.CommandText = @"INSERT INTO pages_fts (rowid, url, title)
+VALUES ($rowid, $url, $title)";
         var rowIdParam = ftsCmd.CreateParameter();
         rowIdParam.ParameterName = "$rowid";
         ftsCmd.Parameters.Add(rowIdParam);
@@ -278,29 +275,55 @@ VALUES ($rowid, $url, $title, $desc, $ogTitle, $ogDesc, $h1)";
         var titleParam2 = ftsCmd.CreateParameter();
         titleParam2.ParameterName = "$title";
         ftsCmd.Parameters.Add(titleParam2);
-        var descParam2 = ftsCmd.CreateParameter();
-        descParam2.ParameterName = "$desc";
-        ftsCmd.Parameters.Add(descParam2);
-        var ogTitleParam2 = ftsCmd.CreateParameter();
-        ogTitleParam2.ParameterName = "$ogTitle";
-        ftsCmd.Parameters.Add(ogTitleParam2);
-        var ogDescParam2 = ftsCmd.CreateParameter();
-        ogDescParam2.ParameterName = "$ogDesc";
-        ftsCmd.Parameters.Add(ogDescParam2);
-        var h1Param2 = ftsCmd.CreateParameter();
-        h1Param2.ParameterName = "$h1";
-        ftsCmd.Parameters.Add(h1Param2);
+
+        var metaFtsCmd = _connection.CreateCommand();
+        metaFtsCmd.CommandText = @"INSERT INTO meta_fts (url, title, meta_name, meta_content)
+VALUES ($url, $title, $metaName, $metaContent)";
+        var metaUrlParam = metaFtsCmd.CreateParameter();
+        metaUrlParam.ParameterName = "$url";
+        metaFtsCmd.Parameters.Add(metaUrlParam);
+        var metaTitleParam = metaFtsCmd.CreateParameter();
+        metaTitleParam.ParameterName = "$title";
+        metaFtsCmd.Parameters.Add(metaTitleParam);
+        var metaNameParam = metaFtsCmd.CreateParameter();
+        metaNameParam.ParameterName = "$metaName";
+        metaFtsCmd.Parameters.Add(metaNameParam);
+        var metaContentParam = metaFtsCmd.CreateParameter();
+        metaContentParam.ParameterName = "$metaContent";
+        metaFtsCmd.Parameters.Add(metaContentParam);
+
+        var deleteMetaFtsCmd = _connection.CreateCommand();
+        deleteMetaFtsCmd.CommandText = "DELETE FROM meta_fts WHERE url = $url";
+        var deleteMetaUrlParam = deleteMetaFtsCmd.CreateParameter();
+        deleteMetaUrlParam.ParameterName = "$url";
+        deleteMetaFtsCmd.Parameters.Add(deleteMetaUrlParam);
 
         foreach (var record in batch)
         {
             rowIdParam.Value = (long)record.UrlHash;
             ftsUrlParam.Value = record.Url;
             titleParam2.Value = record.Title ?? string.Empty;
-            descParam2.Value = record.Description ?? string.Empty;
-            ogTitleParam2.Value = record.OgTitle ?? string.Empty;
-            ogDescParam2.Value = record.OgDescription ?? string.Empty;
-            h1Param2.Value = record.H1 ?? string.Empty;
             await ftsCmd.ExecuteNonQueryAsync();
+
+            deleteHashParam.Value = (long)record.UrlHash;
+            await deleteTagsCmd.ExecuteNonQueryAsync();
+
+            deleteMetaUrlParam.Value = record.Url;
+            await deleteMetaFtsCmd.ExecuteNonQueryAsync();
+
+            foreach (var tag in record.MetaTags)
+            {
+                tagHashParam.Value = (long)record.UrlHash;
+                nameParam.Value = tag.Name;
+                contentParam.Value = tag.Content;
+                await insertTagCmd.ExecuteNonQueryAsync();
+
+                metaUrlParam.Value = record.Url;
+                metaTitleParam.Value = record.Title ?? string.Empty;
+                metaNameParam.Value = tag.Name;
+                metaContentParam.Value = tag.Content;
+                await metaFtsCmd.ExecuteNonQueryAsync();
+            }
         }
 
         await transaction.CommitAsync();
