@@ -7,29 +7,22 @@ Katana Indexer wraps the [ProjectDiscovery Katana](https://github.com/projectdis
 - Go 1.21+
 - `katana` CLI installed and on your `PATH`
 
-## Quick start
+## Quick start (Windows PowerShell)
 
-```bash
-# Build
-mkdir -p bin
-
-go build -o bin/katana-indexer ./cmd/katana-indexer
-
-# Windows (build an .exe)
-go build -o bin/katana-indexer.exe ./cmd/katana-indexer
+```powershell
+# Build (creates bin\katana-indexer.exe)
+New-Item -ItemType Directory -Force -Path bin | Out-Null
+go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 
 # Crawl a domain (non-headless by default)
-./bin/katana-indexer crawl --domain https://example.com \
-  --fetch-workers 128 --max-connections 512
+.\bin\katana-indexer.exe crawl --domain https://example.com --fetch-workers 128 --max-connections 512
 
 # Crawl and start the search UI immediately
-./bin/katana-indexer crawl --domain https://example.com --serve --serve-addr :8080
+.\bin\katana-indexer.exe crawl --domain https://example.com --serve --serve-addr :8080
 
 # Launch search UI
-./bin/katana-indexer serve --domain https://example.com --addr :8080
+.\bin\katana-indexer.exe serve --domain https://example.com --addr :8080
 ```
-
-On Windows, run `bin\\katana-indexer.exe` instead of `./bin/katana-indexer`.
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
@@ -37,32 +30,27 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
 
 1. **Install Katana**: follow the Katana README to install the CLI and ensure it is on your `PATH`.
 2. **Verify Go is installed**:
-   ```bash
+   ```powershell
    go version
    ```
 3. **Build the binary**:
-   ```bash
-   mkdir -p bin
-   go build -o bin/katana-indexer ./cmd/katana-indexer
-   go build -o bin/katana-indexer.exe ./cmd/katana-indexer
+   ```powershell
+   New-Item -ItemType Directory -Force -Path bin | Out-Null
+   go build -o bin\katana-indexer.exe .\cmd\katana-indexer
    ```
 4. **Run a crawl (only the domain is required)**:
-   ```bash
-   ./bin/katana-indexer crawl --domain https://example.com
+   ```powershell
+   .\bin\katana-indexer.exe crawl --domain https://example.com
    ```
    This auto-creates a local database at `./katana-index/example.com/index.db` (based on the domain).
-   On Windows, use:
-   ```bash
-   bin\katana-indexer.exe crawl --domain https://example.com
-   ```
 5. **Start the search UI**:
-   ```bash
-   ./bin/katana-indexer serve --domain https://example.com --addr :8080
+   ```powershell
+   .\bin\katana-indexer.exe serve --domain https://example.com --addr :8080
    ```
 6. **Search your index**: open `http://localhost:8080` and search for keywords, tags, or descriptions.
 7. **Want the UI immediately?** Run crawl with `--serve`:
-   ```bash
-   ./bin/katana-indexer crawl --domain https://example.com --serve --serve-addr :8080
+   ```powershell
+   .\bin\katana-indexer.exe crawl --domain https://example.com --serve --serve-addr :8080
    ```
 
 > **Note (Windows)**: Katana runs non-headless and may prompt you to choose a browser the first time. Pick Chrome or Edge and set it as the default so the crawl continues without asking again.
@@ -77,21 +65,21 @@ Open `http://localhost:8080` and search by keywords/tags. Click any result to op
 
 If you see errors like **“missing go.sum entry”**, your Go module cache needs to download dependencies:
 
-```bash
+```powershell
 go mod tidy
 ```
 
 If that does not resolve it, run:
 
-```bash
+```powershell
 go get github.com/mattn/go-sqlite3
 go get golang.org/x/net/html
 ```
 
 Then rebuild:
 
-```bash
-go build -o bin/katana-indexer ./cmd/katana-indexer
+```powershell
+go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 ```
 
 ## Flags
