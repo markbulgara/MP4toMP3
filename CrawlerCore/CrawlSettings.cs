@@ -6,6 +6,7 @@ public sealed record CrawlSettings
 {
     public int MaxPages { get; init; } = 200_000;
     public TimeSpan MaxRuntime { get; init; } = TimeSpan.FromHours(2);
+    public int MaxUrlLength { get; init; } = 2048;
     public int MaxRedirects { get; init; } = 10;
     public int MaxResponseBytes { get; init; } = 4 * 1024 * 1024;
     public int GlobalConcurrency { get; init; } = 50;
