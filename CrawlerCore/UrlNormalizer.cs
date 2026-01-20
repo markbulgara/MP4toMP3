@@ -82,7 +82,13 @@ public sealed class UrlNormalizer
         }
 
         normalized = builder.Uri;
-        if (settings.MaxUrlLength > 0 && normalized.ToString().Length > settings.MaxUrlLength)
+        var normalizedString = normalized.ToString();
+        if (settings.MinUrlLength > 0 && normalizedString.Length < settings.MinUrlLength)
+        {
+            return false;
+        }
+
+        if (settings.MaxUrlLength > 0 && normalizedString.Length > settings.MaxUrlLength)
         {
             return false;
         }
