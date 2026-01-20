@@ -1,7 +1,9 @@
 import csv
 import json
 import os
+import queue
 import subprocess
+import threading
 import time
 from dataclasses import asdict
 from datetime import datetime
@@ -228,6 +230,21 @@ class KatanaRunner(QObject):
         self._current_process = process
         if not process.stdout or not process.stderr:
             return []
+        output_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
+
+        def _read_stream(stream, label: str) -> None:
+            for line in iter(stream.readline, ""):
+                output_queue.put((label, line))
+            output_queue.put((label, ""))
+
+        stdout_thread = threading.Thread(
+            target=_read_stream, args=(process.stdout, "stdout"), daemon=True
+        )
+        stderr_thread = threading.Thread(
+            target=_read_stream, args=(process.stderr, "stderr"), daemon=True
+        )
+        stdout_thread.start()
+        stderr_thread.start()
         try:
             while True:
                 if self._start_time and self.config.max_runtime > 0:
@@ -242,18 +259,23 @@ class KatanaRunner(QObject):
                 if self._stop_requested:
                     self._terminate_process(process)
                     break
-                line = process.stdout.readline()
-                err_line = process.stderr.readline()
-                if err_line:
-                    log_handle.write(err_line)
-                    log_handle.flush()
-                    self.signals.log.emit(err_line.strip())
-                if not line:
-                    if process.poll() is not None:
+                try:
+                    source, line = output_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if process.poll() is not None and output_queue.empty():
                         break
-                    time.sleep(0.05)
                     continue
-                yield line.strip()
+                if not line:
+                    continue
+                cleaned = line.strip()
+                if source == "stderr":
+                    log_handle.write(line)
+                    log_handle.flush()
+                    if cleaned:
+                        self.signals.log.emit(cleaned)
+                    continue
+                if cleaned:
+                    yield cleaned
         finally:
             if process.poll() is None:
                 self._terminate_process(process)
