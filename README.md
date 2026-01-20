@@ -29,7 +29,7 @@ go build -o bin\katana-indexer.exe .\cmd\katana-indexer
 .\bin\katana-indexer.exe serve --addr :8080
 ```
 
-Prefer double-click? Run `run_gui.bat` to build (with CGO + FTS5 enabled), launch the GUI, and keep logs visible in the same window.
+Prefer double-click? Run `run_gui.bat` to build (with CGO + FTS5 enabled), launch the GUI, and keep this window open while the GUI runs.
 
 Open `http://localhost:8080` and search by keywords/tags. Click any result to open the URL in your browser.
 
