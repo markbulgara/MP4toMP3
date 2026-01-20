@@ -13,54 +13,55 @@ const schema = `
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA temp_store=MEMORY;
-PRAGMA foreign_keys=ON;
 
-CREATE TABLE IF NOT EXISTS urls (
+CREATE TABLE IF NOT EXISTS pages (
 	url TEXT PRIMARY KEY,
 	title TEXT,
 	description TEXT,
 	keywords TEXT,
 	content_type TEXT,
-	tag TEXT,
-	attribute TEXT,
-	source TEXT,
-	depth INTEGER,
 	status_code INTEGER,
-	video_urls TEXT,
-	is_video INTEGER DEFAULT 0,
 	last_seen TIMESTAMP NOT NULL,
 	fetched_at TIMESTAMP
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS urls_fts USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
 	url,
 	title,
 	description,
 	keywords,
-	tag,
-	source,
-	content_type,
-	content='urls',
+	content='pages',
 	content_rowid='rowid'
 );
 
-CREATE TRIGGER IF NOT EXISTS urls_ai AFTER INSERT ON urls BEGIN
-	INSERT INTO urls_fts(rowid, url, title, description, keywords, tag, source, content_type)
-	VALUES (new.rowid, new.url, new.title, new.description, new.keywords, new.tag, new.source, new.content_type);
+CREATE TRIGGER IF NOT EXISTS pages_ai AFTER INSERT ON pages BEGIN
+	INSERT INTO pages_fts(rowid, url, title, description, keywords)
+	VALUES (new.rowid, new.url, new.title, new.description, new.keywords);
 END;
 
-CREATE TRIGGER IF NOT EXISTS urls_ad AFTER DELETE ON urls BEGIN
-	INSERT INTO urls_fts(urls_fts, rowid, url, title, description, keywords, tag, source, content_type)
-	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords, old.tag, old.source, old.content_type);
+CREATE TRIGGER IF NOT EXISTS pages_ad AFTER DELETE ON pages BEGIN
+	INSERT INTO pages_fts(pages_fts, rowid, url, title, description, keywords)
+	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords);
 END;
 
-CREATE TRIGGER IF NOT EXISTS urls_au AFTER UPDATE ON urls BEGIN
-	INSERT INTO urls_fts(urls_fts, rowid, url, title, description, keywords, tag, source, content_type)
-	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords, old.tag, old.source, old.content_type);
-	INSERT INTO urls_fts(rowid, url, title, description, keywords, tag, source, content_type)
-	VALUES (new.rowid, new.url, new.title, new.description, new.keywords, new.tag, new.source, new.content_type);
+CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
+	INSERT INTO pages_fts(pages_fts, rowid, url, title, description, keywords)
+	VALUES ('delete', old.rowid, old.url, old.title, old.description, old.keywords);
+	INSERT INTO pages_fts(rowid, url, title, description, keywords)
+	VALUES (new.rowid, new.url, new.title, new.description, new.keywords);
 END;
 `
+
+type Entry struct {
+	URL         string
+	Title       string
+	Description string
+	Keywords    string
+	ContentType string
+	StatusCode  int
+	LastSeen    time.Time
+	FetchedAt   *time.Time
+}
 
 func Open(path string) (*sql.DB, error) {
 	if path == "" {
@@ -71,33 +72,23 @@ func Open(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-
 	return db, nil
 }
 
-func UpsertURL(db *sql.DB, entry URLEntry) error {
-	_, err := db.Exec(`
-		INSERT INTO urls (
-			url, title, description, keywords, content_type, tag, attribute, source, depth,
-			status_code, video_urls, is_video, last_seen, fetched_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+func Upsert(dbConn *sql.DB, entry Entry) error {
+	_, err := dbConn.Exec(`
+		INSERT INTO pages (url, title, description, keywords, content_type, status_code, last_seen, fetched_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(url) DO UPDATE SET
 			title=excluded.title,
 			description=excluded.description,
 			keywords=excluded.keywords,
 			content_type=excluded.content_type,
-			tag=excluded.tag,
-			attribute=excluded.attribute,
-			source=excluded.source,
-			depth=excluded.depth,
 			status_code=excluded.status_code,
-			video_urls=excluded.video_urls,
-			is_video=excluded.is_video,
 			last_seen=excluded.last_seen,
 			fetched_at=excluded.fetched_at
 	`,
@@ -106,22 +97,16 @@ func UpsertURL(db *sql.DB, entry URLEntry) error {
 		entry.Description,
 		entry.Keywords,
 		entry.ContentType,
-		entry.Tag,
-		entry.Attribute,
-		entry.Source,
-		entry.Depth,
 		entry.StatusCode,
-		entry.VideoURLs,
-		entry.IsVideo,
 		entry.LastSeen,
 		entry.FetchedAt,
 	)
 	return err
 }
 
-func NeedsMetadata(db *sql.DB, url string) (bool, error) {
+func NeedsFetch(dbConn *sql.DB, url string) (bool, error) {
 	var fetchedAt sql.NullTime
-	err := db.QueryRow("SELECT fetched_at FROM urls WHERE url = ?", url).Scan(&fetchedAt)
+	err := dbConn.QueryRow("SELECT fetched_at FROM pages WHERE url = ?", url).Scan(&fetchedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return true, nil
@@ -131,17 +116,11 @@ func NeedsMetadata(db *sql.DB, url string) (bool, error) {
 	return !fetchedAt.Valid, nil
 }
 
-func MarkFetched(db *sql.DB, url string, fetchedAt time.Time) error {
-	_, err := db.Exec("UPDATE urls SET fetched_at = ? WHERE url = ?", fetchedAt, url)
-	return err
-}
-
-func Search(db *sql.DB, query string, limit int, offset int) ([]URLEntry, error) {
+func Search(dbConn *sql.DB, query string, limit int, offset int) ([]Entry, error) {
 	if query == "" {
-		rows, err := db.Query(`
-			SELECT url, title, description, keywords, content_type, tag, attribute, source, depth,
-			status_code, video_urls, is_video, last_seen, fetched_at
-			FROM urls
+		rows, err := dbConn.Query(`
+			SELECT url, title, description, keywords, content_type, status_code, last_seen, fetched_at
+			FROM pages
 			ORDER BY last_seen DESC
 			LIMIT ? OFFSET ?
 		`, limit, offset)
@@ -152,13 +131,10 @@ func Search(db *sql.DB, query string, limit int, offset int) ([]URLEntry, error)
 		return scanRows(rows)
 	}
 
-	rows, err := db.Query(`
-		SELECT url, title, description, keywords, content_type, tag, attribute, source, depth,
-		status_code, video_urls, is_video, last_seen, fetched_at
-		FROM urls
-		WHERE rowid IN (
-			SELECT rowid FROM urls_fts WHERE urls_fts MATCH ?
-		)
+	rows, err := dbConn.Query(`
+		SELECT url, title, description, keywords, content_type, status_code, last_seen, fetched_at
+		FROM pages
+		WHERE rowid IN (SELECT rowid FROM pages_fts WHERE pages_fts MATCH ?)
 		ORDER BY last_seen DESC
 		LIMIT ? OFFSET ?
 	`, query, limit, offset)
@@ -169,10 +145,10 @@ func Search(db *sql.DB, query string, limit int, offset int) ([]URLEntry, error)
 	return scanRows(rows)
 }
 
-func scanRows(rows *sql.Rows) ([]URLEntry, error) {
-	results := []URLEntry{}
+func scanRows(rows *sql.Rows) ([]Entry, error) {
+	results := []Entry{}
 	for rows.Next() {
-		var entry URLEntry
+		var entry Entry
 		var fetchedAt sql.NullTime
 		err := rows.Scan(
 			&entry.URL,
@@ -180,13 +156,7 @@ func scanRows(rows *sql.Rows) ([]URLEntry, error) {
 			&entry.Description,
 			&entry.Keywords,
 			&entry.ContentType,
-			&entry.Tag,
-			&entry.Attribute,
-			&entry.Source,
-			&entry.Depth,
 			&entry.StatusCode,
-			&entry.VideoURLs,
-			&entry.IsVideo,
 			&entry.LastSeen,
 			&fetchedAt,
 		)
@@ -201,32 +171,9 @@ func scanRows(rows *sql.Rows) ([]URLEntry, error) {
 	return results, rows.Err()
 }
 
-func Count(db *sql.DB) (int, error) {
-	var count int
-	err := db.QueryRow("SELECT COUNT(1) FROM urls").Scan(&count)
-	return count, err
-}
-
-func DefaultEntry(url string) URLEntry {
-	return URLEntry{
+func DefaultEntry(url string) Entry {
+	return Entry{
 		URL:      url,
 		LastSeen: time.Now().UTC(),
 	}
-}
-
-type URLEntry struct {
-	URL         string
-	Title       string
-	Description string
-	Keywords    string
-	ContentType string
-	Tag         string
-	Attribute   string
-	Source      string
-	Depth       int
-	StatusCode  int
-	VideoURLs   string
-	IsVideo     int
-	LastSeen    time.Time
-	FetchedAt   *time.Time
 }

@@ -3,8 +3,6 @@ package metadata
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -15,18 +13,12 @@ import (
 
 const maxBodyBytes = 2 * 1024 * 1024
 
-var videoExtensions = []string{
-	".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".m3u8",
-}
-
 type Result struct {
 	Title       string
 	Description string
 	Keywords    string
 	ContentType string
 	StatusCode  int
-	VideoURLs   []string
-	IsVideo     bool
 }
 
 func Fetch(ctx context.Context, client *http.Client, url string) (Result, error) {
@@ -46,11 +38,6 @@ func Fetch(ctx context.Context, client *http.Client, url string) (Result, error)
 		StatusCode:  resp.StatusCode,
 	}
 
-	if isVideoContentType(result.ContentType) {
-		result.IsVideo = true
-		return result, nil
-	}
-
 	limited := io.LimitReader(resp.Body, maxBodyBytes)
 	body, err := io.ReadAll(limited)
 	if err != nil {
@@ -58,7 +45,6 @@ func Fetch(ctx context.Context, client *http.Client, url string) (Result, error)
 	}
 
 	if !strings.Contains(strings.ToLower(result.ContentType), "html") {
-		result.IsVideo = hasVideoExtension(url)
 		return result, nil
 	}
 
@@ -72,7 +58,6 @@ func parseHTML(body []byte, result Result) Result {
 	}
 
 	var keywords []string
-	var videoURLs []string
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
@@ -97,12 +82,6 @@ func parseHTML(body []byte, result Result) Result {
 				if name == "keywords" {
 					keywords = append(keywords, content)
 				}
-			case "video", "source":
-				for _, attr := range n.Attr {
-					if attr.Key == "src" && attr.Val != "" {
-						videoURLs = append(videoURLs, attr.Val)
-					}
-				}
 			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -111,8 +90,6 @@ func parseHTML(body []byte, result Result) Result {
 	}
 
 	walk(doc)
-	result.VideoURLs = normalizeList(videoURLs)
-	result.IsVideo = len(result.VideoURLs) > 0
 	result.Keywords = strings.Join(normalizeList(keywords), ", ")
 	return result
 }
@@ -132,31 +109,6 @@ func normalizeList(values []string) []string {
 		result = append(result, trimmed)
 	}
 	return result
-}
-
-func isVideoContentType(contentType string) bool {
-	return strings.Contains(strings.ToLower(contentType), "video/")
-}
-
-func hasVideoExtension(url string) bool {
-	lower := strings.ToLower(url)
-	for _, ext := range videoExtensions {
-		if strings.Contains(lower, ext) {
-			return true
-		}
-	}
-	return false
-}
-
-func EncodeVideoURLs(urls []string) string {
-	if len(urls) == 0 {
-		return ""
-	}
-	payload, err := json.Marshal(urls)
-	if err != nil {
-		return ""
-	}
-	return string(payload)
 }
 
 func NewHTTPClient(timeout time.Duration, userAgent string, maxConns int) *http.Client {
@@ -186,19 +138,4 @@ func (u userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		cloned.Header.Set("User-Agent", u.userAgent)
 	}
 	return u.base.RoundTrip(cloned)
-}
-
-func PrettyVideoURLs(encoded string) string {
-	if encoded == "" {
-		return ""
-	}
-	var urls []string
-	if err := json.Unmarshal([]byte(encoded), &urls); err != nil {
-		return encoded
-	}
-	return strings.Join(urls, ", ")
-}
-
-func FormatDuration(seconds int) string {
-	return fmt.Sprintf("%ds", seconds)
 }
