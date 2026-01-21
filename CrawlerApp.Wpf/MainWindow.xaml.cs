@@ -8,4 +8,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
     }
+
+    private void CopyUrlFromTextBlock(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is TextBlock textBlock && !string.IsNullOrWhiteSpace(textBlock.Text))
+        {
+            Clipboard.SetText(textBlock.Text);
+        }
+    }
 }

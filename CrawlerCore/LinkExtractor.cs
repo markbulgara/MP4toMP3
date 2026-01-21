@@ -177,9 +177,17 @@ public sealed class LinkExtractor
         foreach (Match match in Regex.Matches(html, "<meta\\s+[^>]*>", RegexOptions.IgnoreCase))
         {
             var tag = match.Value;
-            var name = ExtractAttribute(tag, "name") ?? ExtractAttribute(tag, "property");
-            var content = ExtractAttribute(tag, "content");
-            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(content))
+            var name = ExtractAttribute(tag, "name") ?? ExtractAttribute(tag, "property") ?? ExtractAttribute(tag, "http-equiv");
+            var content = ExtractAttribute(tag, "content") ?? string.Empty;
+            var charset = ExtractAttribute(tag, "charset");
+
+            if (string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(charset))
+            {
+                results.Add(new MetaTagRecord("charset", charset.Trim()));
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
             {
                 continue;
             }
