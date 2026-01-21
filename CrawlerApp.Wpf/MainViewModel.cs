@@ -44,6 +44,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public RelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
+    public RelayCommand LoadResultsCommand { get; }
 
     public string TargetUrl
     {
@@ -104,6 +105,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         StartCommand = new RelayCommand(() => _ = StartAsync(), () => _engine is null);
         StopCommand = new RelayCommand(Stop, () => _engine is not null);
+        LoadResultsCommand = new RelayCommand(() => _ = LoadResultsAsync(), () => _engine is null);
         _searchRefreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)
@@ -147,6 +149,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         StartCommand.RaiseCanExecuteChanged();
         StopCommand.RaiseCanExecuteChanged();
+        LoadResultsCommand.RaiseCanExecuteChanged();
 
         _ = Task.Run(() => _engine.StartAsync(TargetUrl, _cts.Token));
     }
@@ -158,6 +161,49 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _searchRefreshTimer.Stop();
         StartCommand.RaiseCanExecuteChanged();
         StopCommand.RaiseCanExecuteChanged();
+        LoadResultsCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task LoadResultsAsync()
+    {
+        var openDialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Crawl Database (*.db)|*.db",
+            Title = "Open Crawl Database"
+        };
+
+        if (openDialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        _dbPath = openDialog.FileName;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Pages.Clear();
+            Assets.Clear();
+            MetadataResults.Clear();
+            Logs.Clear();
+            Errors.Clear();
+        });
+
+        _searchRefreshTimer.Start();
+
+        if (!string.IsNullOrWhiteSpace(SearchPagesQuery))
+        {
+            await SearchPagesAsync(SearchPagesQuery);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchAssetsQuery))
+        {
+            await SearchAssetsAsync(SearchAssetsQuery);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchMetadataQuery))
+        {
+            await SearchMetadataAsync(SearchMetadataQuery);
+        }
     }
 
     private void UpdateStats(CrawlStats stats)

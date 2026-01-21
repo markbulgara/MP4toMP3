@@ -21,6 +21,7 @@
                 <TextBox Width="480" Margin="0,0,12,0" Text="{Binding TargetUrl, UpdateSourceTrigger=PropertyChanged}" />
                 <Button Content="Start" Width="120" Margin="0,0,8,0" Command="{Binding StartCommand}" />
                 <Button Content="Stop" Width="120" Command="{Binding StopCommand}" />
+                <Button Content="Load Results" Width="140" Margin="8,0,0,0" Command="{Binding LoadResultsCommand}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <ToggleButton Content="Respect Robots" IsChecked="{Binding RespectRobots}" Margin="0,0,8,0" />
