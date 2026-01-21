@@ -25,6 +25,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _sameHostOnly = true;
     private bool _highThroughput;
     private bool _enableEnrichment = true;
+    private int _minUrlLength = 8;
+    private int _maxUrlLength = 2048;
     private CancellationTokenSource? _cts;
     private CrawlerEngine? _engine;
     private SqliteCrawlStore? _store;
@@ -95,6 +97,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool SameHostOnly { get => _sameHostOnly; set => SetField(ref _sameHostOnly, value); }
     public bool HighThroughput { get => _highThroughput; set => SetField(ref _highThroughput, value); }
     public bool EnableEnrichment { get => _enableEnrichment; set => SetField(ref _enableEnrichment, value); }
+    public int MinUrlLength { get => _minUrlLength; set => SetField(ref _minUrlLength, value); }
+    public int MaxUrlLength { get => _maxUrlLength; set => SetField(ref _maxUrlLength, value); }
 
     public MainViewModel()
     {
@@ -125,7 +129,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             RespectRobots = RespectRobots,
             SameHostOnly = SameHostOnly,
-            EnableEnrichment = EnableEnrichment
+            EnableEnrichment = EnableEnrichment,
+            MinUrlLength = MinUrlLength,
+            MaxUrlLength = MaxUrlLength
         };
 
         if (HighThroughput)

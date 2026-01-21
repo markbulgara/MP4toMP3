@@ -22,11 +22,15 @@
                 <Button Content="Start" Width="120" Margin="0,0,8,0" Command="{Binding StartCommand}" />
                 <Button Content="Stop" Width="120" Command="{Binding StopCommand}" />
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <ToggleButton Content="Respect Robots" IsChecked="{Binding RespectRobots}" Margin="0,0,8,0" />
                 <ToggleButton Content="Same Host Only" IsChecked="{Binding SameHostOnly}" Margin="0,0,8,0" />
                 <ToggleButton Content="High Throughput" IsChecked="{Binding HighThroughput}" Margin="0,0,8,0" />
                 <ToggleButton Content="Enable Enrichment" IsChecked="{Binding EnableEnrichment}" />
+                <TextBlock Text="Min URL Len" Margin="16,0,6,0" VerticalAlignment="Center" />
+                <TextBox Width="70" Text="{Binding MinUrlLength}" Margin="0,0,8,0" />
+                <TextBlock Text="Max URL Len" Margin="8,0,6,0" VerticalAlignment="Center" />
+                <TextBox Width="70" Text="{Binding MaxUrlLength}" />
             </StackPanel>
         </StackPanel>
 
