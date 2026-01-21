@@ -329,16 +329,43 @@ WHERE pages_fts MATCH $query";
                 var metaCmd = connection.CreateCommand();
                 metaCmd.CommandText = @"SELECT url, title, meta_name, meta_content
 FROM meta_fts
-WHERE meta_fts MATCH $query";
+WHERE meta_fts MATCH $query
+UNION
+SELECT m.url, m.title, t.name, t.content
+FROM meta_tags t
+JOIN metadata m ON m.url_hash = t.url_hash
+WHERE t.name LIKE $like OR t.content LIKE $like";
                 metaCmd.Parameters.AddWithValue("$query", query);
-                await using var metaReader = await metaCmd.ExecuteReaderAsync();
-                while (await metaReader.ReadAsync())
+                metaCmd.Parameters.AddWithValue("$like", "%" + query + "%");
+                try
                 {
-                    metadata.Add(new MetadataResult(
-                        ReadString(metaReader, 0),
-                        ReadString(metaReader, 1),
-                        ReadString(metaReader, 2),
-                        ReadString(metaReader, 3)));
+                    await using var metaReader = await metaCmd.ExecuteReaderAsync();
+                    while (await metaReader.ReadAsync())
+                    {
+                        metadata.Add(new MetadataResult(
+                            ReadString(metaReader, 0),
+                            ReadString(metaReader, 1),
+                            ReadString(metaReader, 2),
+                            ReadString(metaReader, 3)));
+                    }
+                }
+                catch (SqliteException)
+                {
+                    var fallbackCmd = connection.CreateCommand();
+                    fallbackCmd.CommandText = @"SELECT m.url, m.title, t.name, t.content
+FROM meta_tags t
+JOIN metadata m ON m.url_hash = t.url_hash
+WHERE t.name LIKE $like OR t.content LIKE $like";
+                    fallbackCmd.Parameters.AddWithValue("$like", "%" + query + "%");
+                    await using var fallbackReader = await fallbackCmd.ExecuteReaderAsync();
+                    while (await fallbackReader.ReadAsync())
+                    {
+                        metadata.Add(new MetadataResult(
+                            ReadString(fallbackReader, 0),
+                            ReadString(fallbackReader, 1),
+                            ReadString(fallbackReader, 2),
+                            ReadString(fallbackReader, 3)));
+                    }
                 }
             });
         }
