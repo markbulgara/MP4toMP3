@@ -14,6 +14,9 @@ export type EntityBase = {
   source?: string;
   description?: string;
   entries?: string[];
+  text?: string;
+  tags?: string[];
+  raw?: unknown;
 };
 
 export type Spell = EntityBase & {
@@ -24,39 +27,53 @@ export type Spell = EntityBase & {
   range?: string;
   duration?: string;
   components?: string;
+  classes?: string[];
+  entriesText?: string;
 };
 
 export type Item = EntityBase & {
   type: "item";
+  itemType?: string;
   rarity?: string;
   weight?: number;
-  value?: string;
+  value?: string | number;
+  weaponProps?: string[];
+  armor?: { acBase: number; dexCap?: number; category?: string };
 };
 
 export type Species = EntityBase & {
   type: "species";
-  speed?: number;
+  size?: string | string[];
+  speed?: number | Record<string, number>;
+  featuresText?: string;
+  abilityBonuses?: Record<string, number>;
 };
 
 export type Class = EntityBase & {
   type: "class";
   hitDie?: string;
   primaryAbility?: string[];
+  proficiencies?: string[];
+  levels?: Array<{ level: number; features: string[] }>;
 };
 
 export type Subclass = EntityBase & {
   type: "subclass";
   parentClassId?: string;
+  levels?: Array<{ level: number; features: string[] }>;
 };
 
 export type Background = EntityBase & {
   type: "background";
   proficiencies?: string[];
+  featuresText?: string;
+  proficienciesText?: string;
 };
 
 export type Feat = EntityBase & {
   type: "feat";
   prerequisites?: string[];
+  featuresText?: string;
 };
 
 export type AnyEntity =

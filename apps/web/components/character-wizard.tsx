@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCreator } from "@/store/creator";
 import { useCharacters } from "@/store/characters";
-import { getRegistry } from "@/lib/providers";
 import type { AnyEntity, EntityType } from "@ash/core";
+import { db, getSpellsForClass } from "@ash/core";
 
 const stepTitles: Record<string, string> = {
   species: "Choose a species",
@@ -51,7 +51,6 @@ export const CharacterWizard = () => {
   const { createCharacter } = useCharacters();
   const [list, setList] = useState<AnyEntity[]>([]);
   const [detail, setDetail] = useState<AnyEntity | null>(null);
-  const registry = getRegistry();
 
   const typeForStep: EntityType | null = useMemo(() => {
     switch (step) {
@@ -76,12 +75,27 @@ export const CharacterWizard = () => {
         setList([]);
         return;
       }
-      const result = await registry.listEntities(typeForStep, {}, { page: 0, pageSize: 50 });
-      setList(result.items);
-      setDetail(result.items[0] ?? null);
+      const table = {
+        class: db.classes,
+        subclass: db.subclasses,
+        species: db.species,
+        background: db.backgrounds,
+        feat: db.feats,
+        spell: db.spells,
+        item: db.items
+      }[typeForStep];
+      if (typeForStep === "spell" && selections.class) {
+        const spells = await getSpellsForClass(selections.class);
+        setList(spells.slice(0, 50));
+        setDetail(spells[0] ?? null);
+        return;
+      }
+      const items = await table.toArray();
+      setList(items.slice(0, 50));
+      setDetail(items[0] ?? null);
     };
     load();
-  }, [registry, typeForStep]);
+  }, [typeForStep, selections.class]);
 
   const handleSelect = (entry: AnyEntity) => {
     setDetail(entry);

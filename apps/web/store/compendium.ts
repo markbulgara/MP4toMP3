@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { AnyEntity, EntityType } from "@ash/core";
-import { getRegistry } from "@/lib/providers";
+import { searchEntities } from "@ash/core";
 
 export type CompendiumState = {
   type: EntityType;
@@ -21,9 +21,8 @@ export const useCompendium = create<CompendiumState>((set, get) => ({
   setQuery: (query) => set({ query }),
   fetchItems: async () => {
     set({ loading: true });
-    const registry = getRegistry();
     const { type, query } = get();
-    const result = await registry.listEntities(type, { name: query }, { page: 0, pageSize: 200 });
+    const result = await searchEntities(type, query, {}, 0, 200);
     set({ items: result.items, loading: false });
   }
 }));

@@ -36,3 +36,7 @@ pnpm test
 ## Content Sources
 
 Go to **Settings → Content Sources** to import JSON data or install a license pack. Remote providers are optional and disabled by default.
+
+## Import Data
+
+Go to **Settings → Import Data** to run the robust import pipeline with progress tracking and a downloadable report.

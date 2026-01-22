@@ -15,6 +15,10 @@ AshBeyond is a monorepo that delivers an offline-first compendium browser and ch
 3. The `ProviderRegistry` merges results across enabled providers and namespaces IDs as `providerId:entityId`.
 4. The UI consumes registry results through Zustand stores and renders them in virtualized lists.
 
+## Import Pipeline
+
+The Import Data screen runs an ingestion pipeline that detects entity payloads, normalizes them, stores records in per-entity Dexie tables, and updates the search index incrementally.
+
 ## Offline-First
 
 All installed content sources are cached in IndexedDB via Dexie. The remote provider is disabled by default; once enabled it caches fetched pages locally for offline access.

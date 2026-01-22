@@ -3,7 +3,8 @@ import Link from "next/link";
 const navItems = [
   { href: "/", label: "Compendium" },
   { href: "/characters", label: "Characters" },
-  { href: "/settings/content-sources", label: "Settings" }
+  { href: "/settings/content-sources", label: "Content Sources" },
+  { href: "/settings/import", label: "Import Data" }
 ];
 
 export const Sidebar = () => {
