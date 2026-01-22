@@ -173,17 +173,23 @@ public sealed class CrawlerEngine : IAsyncDisposable
 
     private async Task DbLoopAsync(CancellationToken cancellationToken)
     {
+        var pendingPages = 0;
+        var pendingAssets = 0;
+        var pendingMeta = 0;
+
         await foreach (var parse in _parseChannel.Reader.ReadAllAsync(cancellationToken))
         {
             var urlHash = Hashing.XxHash64(parse.Url);
             var page = new PageRecord(_runId, parse.Url, urlHash, parse.StatusCode, parse.ContentType, parse.Title, parse.FinalUrl, parse.Referrer);
             _store.BufferPage(page);
+            pendingPages++;
 
             foreach (var asset in parse.Assets)
             {
                 var record = asset with { RunId = page.RunId, UrlHash = urlHash, Url = parse.Url };
                 _store.BufferAsset(record);
                 Interlocked.Add(ref _assets, 1);
+                pendingAssets++;
             }
 
             foreach (var link in parse.DiscoveredLinks)
@@ -193,11 +199,41 @@ public sealed class CrawlerEngine : IAsyncDisposable
 
             var metadata = new EnrichedMetadata(urlHash, parse.Url, parse.Title, parse.MetaTags);
             _store.BufferMetadata(metadata);
+            pendingMeta++;
 
             Interlocked.Increment(ref _parsed);
 
+            if (pendingPages >= _settings.PageBatchSize)
+            {
+                await _store.FlushPagesAsync(_settings.PageBatchSize);
+                pendingPages = 0;
+            }
+
+            if (pendingAssets >= _settings.AssetBatchSize)
+            {
+                await _store.FlushAssetsAsync(_settings.AssetBatchSize);
+                pendingAssets = 0;
+            }
+
+            if (pendingMeta >= _settings.PageBatchSize)
+            {
+                await _store.FlushMetadataAsync(_settings.PageBatchSize);
+                pendingMeta = 0;
+            }
+        }
+
+        if (pendingPages > 0)
+        {
             await _store.FlushPagesAsync(_settings.PageBatchSize);
+        }
+
+        if (pendingAssets > 0)
+        {
             await _store.FlushAssetsAsync(_settings.AssetBatchSize);
+        }
+
+        if (pendingMeta > 0)
+        {
             await _store.FlushMetadataAsync(_settings.PageBatchSize);
         }
     }
