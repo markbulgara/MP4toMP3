@@ -373,16 +373,16 @@ WHERE pages_fts MATCH $query";
                     reader.IsDBNull(index) ? string.Empty : reader.GetString(index);
 
                 var metaCmd = connection.CreateCommand();
-                metaCmd.CommandText = @"SELECT url, title, meta_name, meta_content
+                var likeClauses = BuildLikeClauses(metaCmd, query);
+                metaCmd.CommandText = $@"SELECT url, title, meta_name, meta_content
 FROM meta_fts
 WHERE meta_fts MATCH $query
 UNION
 SELECT m.url, m.title, t.name, t.content
 FROM meta_tags t
 JOIN metadata m ON m.url_hash = t.url_hash
-WHERE t.name LIKE $like OR t.content LIKE $like";
-                metaCmd.Parameters.AddWithValue("$query", query);
-                metaCmd.Parameters.AddWithValue("$like", "%" + query + "%");
+WHERE {likeClauses}";
+                metaCmd.Parameters.AddWithValue("$query", BuildFtsAndQuery(query));
                 try
                 {
                     await using var metaReader = await metaCmd.ExecuteReaderAsync();
@@ -398,11 +398,11 @@ WHERE t.name LIKE $like OR t.content LIKE $like";
                 catch (SqliteException)
                 {
                     var fallbackCmd = connection.CreateCommand();
-                    fallbackCmd.CommandText = @"SELECT m.url, m.title, t.name, t.content
+                    var fallbackLike = BuildLikeClauses(fallbackCmd, query);
+                    fallbackCmd.CommandText = $@"SELECT m.url, m.title, t.name, t.content
 FROM meta_tags t
 JOIN metadata m ON m.url_hash = t.url_hash
-WHERE t.name LIKE $like OR t.content LIKE $like";
-                    fallbackCmd.Parameters.AddWithValue("$like", "%" + query + "%");
+WHERE {fallbackLike}";
                     await using var fallbackReader = await fallbackCmd.ExecuteReaderAsync();
                     while (await fallbackReader.ReadAsync())
                     {
@@ -428,6 +428,32 @@ WHERE t.name LIKE $like OR t.content LIKE $like";
                 MetadataResults.Add(result);
             }
         });
+    }
+
+    private static string BuildFtsAndQuery(string query)
+    {
+        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return tokens.Length == 0 ? string.Empty : string.Join(" AND ", tokens.Select(token => $"\"{token}\""));
+    }
+
+    private static string BuildLikeClauses(SqliteCommand command, string query)
+    {
+        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            command.Parameters.AddWithValue("$like0", "%");
+            return "(LOWER(t.name) LIKE $like0 OR LOWER(t.content) LIKE $like0)";
+        }
+
+        var clauses = new List<string>();
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var param = $"$like{i}";
+            command.Parameters.AddWithValue(param, "%" + tokens[i].ToLowerInvariant() + "%");
+            clauses.Add($"(LOWER(t.name) LIKE {param} OR LOWER(t.content) LIKE {param})");
+        }
+
+        return string.Join(" AND ", clauses);
     }
 
     private void RefreshSearches()
