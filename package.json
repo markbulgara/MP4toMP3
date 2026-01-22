@@ -1,0 +1,13 @@
+{
+  "name": "ash-beyond",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "pnpm --filter @ash/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm --filter @ash/web lint",
+    "format": "pnpm -r format"
+  }
+}
