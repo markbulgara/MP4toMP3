@@ -9,6 +9,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from re import sub
 from typing import Optional
 
 from flask import Flask, after_this_request, render_template, request, send_file
@@ -33,6 +34,14 @@ SESSION_TTL_SECONDS = 60 * 30
 
 def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+def whisper_available() -> bool:
+    try:
+        import whisper  # noqa: F401
+    except ModuleNotFoundError:
+        return False
+    return True
 
 
 def purge_sessions() -> None:
@@ -95,6 +104,22 @@ def extract_audio(input_path: str, output_path: str) -> subprocess.CompletedProc
         output_path,
     ]
     return subprocess.run(command, capture_output=True, text=True)
+
+
+def transcribe_audio(input_path: str) -> str:
+    import whisper
+
+    model_name = os.getenv("WHISPER_MODEL", "base")
+    model = whisper.load_model(model_name)
+    result = model.transcribe(input_path)
+    return str(result.get("text", "")).strip()
+
+
+def generate_transcript_filename(text: str) -> str:
+    cleaned = sub(r"[^a-zA-Z0-9\\s-]", "", text).strip().lower()
+    cleaned = sub(r"\\s+", "_", cleaned)
+    cleaned = cleaned[:80] or "selection"
+    return secure_filename(cleaned) or "selection"
 
 
 def store_session(temp_dir: str, input_path: str, preview_path: str, duration: float) -> Session:
@@ -247,6 +272,16 @@ def export():
     if result.returncode != 0:
         return {"error": "Export failed.", "details": result.stderr}, 500
 
+    download_name = "selection.mp3"
+    if whisper_available():
+        try:
+            transcript = transcribe_audio(output_path)
+            if transcript:
+                safe_name = generate_transcript_filename(transcript)
+                download_name = f"{safe_name}.mp3"
+        except Exception:
+            download_name = "selection.mp3"
+
     @after_this_request
     def cleanup(response):
         session = SESSIONS.pop(token, None)
@@ -254,7 +289,7 @@ def export():
             shutil.rmtree(session.directory, ignore_errors=True)
         return response
 
-    return send_file(output_path, as_attachment=True, download_name="selection.mp3")
+    return send_file(output_path, as_attachment=True, download_name=download_name)
 
 
 @app.get("/preview/<token>")

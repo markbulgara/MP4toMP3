@@ -21,6 +21,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Optional: auto-name exports from transcription
+
+To auto-name exported selections based on the spoken content, install Whisper:
+
+```bash
+pip install -r requirements-transcribe.txt
+```
+
+You can change the Whisper model size with:
+
+```bash
+export WHISPER_MODEL=base
+```
+
 ## Run
 
 ```bash
