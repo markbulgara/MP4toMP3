@@ -116,8 +116,8 @@ def transcribe_audio(input_path: str) -> str:
 
 
 def generate_transcript_filename(text: str) -> str:
-    cleaned = sub(r"[^a-zA-Z0-9\\s-]", "", text).strip().lower()
-    cleaned = sub(r"\\s+", "_", cleaned)
+    cleaned = sub(r"[^a-zA-Z0-9\s-]", "", text).strip().lower()
+    cleaned = sub(r"\s+", "_", cleaned)
     cleaned = cleaned[:80] or "selection"
     return secure_filename(cleaned) or "selection"
 
