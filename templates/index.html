@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MP4 to MP3 Converter</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="card">
+        <header>
+          <h1>MP4 → MP3 Converter</h1>
+          <p>
+            Drag and drop an MP4 file to extract the audio as an MP3, or visualize the
+            waveform to select a specific range for export.
+          </p>
+        </header>
+
+        <div
+          id="drop-zone"
+          class="drop-zone"
+          role="button"
+          tabindex="0"
+          aria-label="Drag and drop an MP4 file or click to browse"
+        >
+          <div class="drop-zone__content">
+            <span class="drop-zone__icon">🎵</span>
+            <span class="drop-zone__text">Drop your MP4 here</span>
+            <span class="drop-zone__hint">or click to browse</span>
+          </div>
+        </div>
+
+        <div class="file-info" id="file-info">
+          <span class="file-info__label">Selected file:</span>
+          <span class="file-info__name" id="file-name">None</span>
+        </div>
+
+        <div class="actions">
+          <button id="convert-btn" class="button" type="button" disabled>
+            Convert full MP3
+          </button>
+          <button id="waveform-btn" class="button button--secondary" type="button" disabled>
+            Generate waveform
+          </button>
+        </div>
+
+        <div class="status" id="status" role="status"></div>
+
+        <section class="waveform" id="waveform-section" hidden>
+          <header class="waveform__header">
+            <h2>Waveform</h2>
+            <p>Click and drag across the waveform to choose the export range.</p>
+          </header>
+
+          <div class="waveform__canvas" id="waveform-canvas">
+            <div class="waveform__content" id="waveform-content">
+              <img id="waveform-image" alt="Audio waveform" draggable="false" />
+              <div class="waveform__selection" id="waveform-selection"></div>
+              <div class="waveform__playhead" id="waveform-playhead"></div>
+            </div>
+          </div>
+
+          <div class="waveform__meta" id="waveform-meta">
+            <span>Start: <strong id="range-start">0.0s</strong></span>
+            <span>End: <strong id="range-end">0.0s</strong></span>
+            <span>Duration: <strong id="range-duration">0.0s</strong></span>
+          </div>
+
+          <div class="waveform__player">
+            <button id="play-btn" class="button button--ghost" type="button" disabled>
+              Play
+            </button>
+            <button id="play-selection-btn" class="button button--ghost" type="button" disabled>
+              Play selection
+            </button>
+            <label class="waveform__loop">
+              <input id="loop-toggle" type="checkbox" />
+              Loop selection
+            </label>
+            <span id="playback-time">0.0s</span>
+          </div>
+
+          <audio
+            id="audio-player"
+            class="waveform__audio"
+            controls
+            preload="metadata"
+            hidden
+          ></audio>
+
+          <div class="waveform__transcript">
+            <h3>Selection transcript</h3>
+            <p id="transcript-text">Select a range to generate a transcript.</p>
+            <p class="waveform__filename">
+              Suggested filename: <span id="transcript-filename">selection.mp3</span>
+            </p>
+          </div>
+
+          <div class="waveform__controls">
+            <label>
+              Padding before (seconds)
+              <input id="pad-before" type="number" min="0" step="0.1" value="0.5" />
+            </label>
+            <label>
+              Padding after (seconds)
+              <input id="pad-after" type="number" min="0" step="0.1" value="0.5" />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="export-btn" class="button" type="button" disabled>
+              Export selection
+            </button>
+          </div>
+        </section>
+
+        {% if not ffmpeg_ready %}
+        <div class="warning">
+          <strong>ffmpeg not found.</strong> Install ffmpeg and ffprobe on your system to enable
+          conversion.
+        </div>
+        {% endif %}
+      </section>
+    </main>
+
+    <input id="file-input" type="file" accept=".mp4" hidden />
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
