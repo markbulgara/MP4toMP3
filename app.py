@@ -122,6 +122,27 @@ def generate_transcript_filename(text: str) -> str:
     return secure_filename(cleaned) or "selection"
 
 
+def extract_segment(input_path: str, start_time: float, duration: float, output_path: str) -> bool:
+    command = [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        f"{start_time:.3f}",
+        "-i",
+        input_path,
+        "-t",
+        f"{duration:.3f}",
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        output_path,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    return result.returncode == 0
+
+
 def store_session(temp_dir: str, input_path: str, preview_path: str, duration: float) -> Session:
     token = uuid.uuid4().hex
     session = Session(
@@ -273,7 +294,11 @@ def export():
         return {"error": "Export failed.", "details": result.stderr}, 500
 
     download_name = "selection.mp3"
-    if whisper_available():
+    transcript_hint = str(data.get("transcript", "")).strip()
+    if transcript_hint:
+        safe_name = generate_transcript_filename(transcript_hint)
+        download_name = f"{safe_name}.mp3"
+    elif whisper_available():
         try:
             transcript = transcribe_audio(output_path)
             if transcript:
@@ -290,6 +315,51 @@ def export():
         return response
 
     return send_file(output_path, as_attachment=True, download_name=download_name)
+
+
+@app.post("/transcribe-selection")
+def transcribe_selection():
+    if not ffmpeg_available():
+        return {"error": "ffmpeg/ffprobe is not available on this system."}, 400
+
+    if not whisper_available():
+        return {"error": "Whisper is not available for transcription."}, 400
+
+    data = request.get_json(silent=True) or {}
+    token = data.get("token")
+    start = data.get("start")
+    end = data.get("end")
+
+    if not token or start is None or end is None:
+        return {"error": "Missing transcription parameters."}, 400
+
+    session = SESSIONS.get(token)
+    if not session:
+        return {"error": "Waveform session expired. Please upload again."}, 400
+
+    pad_before = max(0.0, float(data.get("pad_before", 0.0)))
+    pad_after = max(0.0, float(data.get("pad_after", 0.0)))
+
+    start_time = max(0.0, float(start) - pad_before)
+    end_time = max(float(end) + pad_after, start_time)
+    duration = max(0.0, end_time - start_time)
+
+    temp_segment = os.path.join(session.directory, f"segment-{uuid.uuid4().hex}.wav")
+    if not extract_segment(session.input_path, start_time, duration, temp_segment):
+        return {"error": "Segment extraction failed."}, 500
+
+    try:
+        transcript = transcribe_audio(temp_segment)
+    finally:
+        if os.path.exists(temp_segment):
+            os.remove(temp_segment)
+
+    safe_name = generate_transcript_filename(transcript) if transcript else "selection"
+
+    return {
+        "transcript": transcript,
+        "filename": f"{safe_name}.mp3",
+    }
 
 
 @app.get("/preview/<token>")

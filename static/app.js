@@ -21,6 +21,8 @@ const padBeforeInput = document.getElementById("pad-before");
 const padAfterInput = document.getElementById("pad-after");
 const status = document.getElementById("status");
 const audioPlayer = document.getElementById("audio-player");
+const transcriptText = document.getElementById("transcript-text");
+const transcriptFilename = document.getElementById("transcript-filename");
 
 let selectedFile = null;
 let waveformToken = null;
@@ -31,6 +33,8 @@ let isSelecting = false;
 let isPlayingSelection = false;
 let zoomLevel = 1;
 let baseWidth = 0;
+let transcriptTimer = null;
+let latestTranscript = "";
 
 const setStatus = (message, type = "") => {
   status.textContent = message;
@@ -65,6 +69,9 @@ const resetWaveform = () => {
   loopToggle.checked = false;
   isPlayingSelection = false;
   playbackTime.textContent = "0.0s";
+  transcriptText.textContent = "Select a range to generate a transcript.";
+  transcriptFilename.textContent = "selection.mp3";
+  latestTranscript = "";
 };
 
 const setFile = (file) => {
@@ -179,6 +186,7 @@ const uploadAndGenerateWaveform = async () => {
     selectionStart = 0;
     selectionEnd = waveformDuration;
     updateSelectionDisplay();
+    requestTranscript();
     setStatus("Waveform ready. Drag to select a range.", "success");
   } catch (error) {
     setStatus(error.message, "error");
@@ -242,6 +250,9 @@ const updateSelectionDisplay = () => {
 
   exportButton.disabled = duration <= 0;
   playSelectionButton.disabled = duration <= 0;
+  if (duration > 0) {
+    requestTranscript();
+  }
 };
 
 const handleSelectionStart = (event) => {
@@ -271,6 +282,57 @@ const handleSelectionEnd = () => {
   updateSelectionDisplay();
 };
 
+const requestTranscript = () => {
+  if (!waveformToken || selectionStart === null || selectionEnd === null) {
+    return;
+  }
+
+  if (transcriptTimer) {
+    window.clearTimeout(transcriptTimer);
+  }
+
+  transcriptText.textContent = "Transcribing selection...";
+  transcriptTimer = window.setTimeout(async () => {
+    const start = Math.min(selectionStart, selectionEnd);
+    const end = Math.max(selectionStart, selectionEnd);
+    if (end <= start) {
+      return;
+    }
+
+    const payload = {
+      token: waveformToken,
+      start,
+      end,
+      pad_before: Number(padBeforeInput.value || 0),
+      pad_after: Number(padAfterInput.value || 0),
+    };
+
+    try {
+      const response = await fetch("/transcribe-selection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Transcription failed.");
+      }
+
+      const data = await response.json();
+      latestTranscript = data.transcript || "";
+      transcriptText.textContent = latestTranscript || "No transcript available.";
+      transcriptFilename.textContent = data.filename || "selection.mp3";
+    } catch (error) {
+      transcriptText.textContent = error.message;
+      transcriptFilename.textContent = "selection.mp3";
+      latestTranscript = "";
+    }
+  }, 400);
+};
+
 const exportSelection = async () => {
   if (!waveformToken) {
     setStatus("Please generate a waveform first.", "error");
@@ -294,6 +356,7 @@ const exportSelection = async () => {
     end,
     pad_before: Number(padBeforeInput.value || 0),
     pad_after: Number(padAfterInput.value || 0),
+    transcript: latestTranscript,
   };
 
   try {
@@ -439,3 +502,6 @@ audioPlayer.addEventListener("ended", () => {
   playSelectionButton.textContent = "Play selection";
   isPlayingSelection = false;
 });
+
+padBeforeInput.addEventListener("change", requestTranscript);
+padAfterInput.addEventListener("change", requestTranscript);
